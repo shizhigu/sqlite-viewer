@@ -55,6 +55,10 @@ pub enum Command {
     /// Snapshot the DB to a new file via `VACUUM INTO`. Useful before
     /// agent-driven mutations.
     Checkpoint(CheckpointArgs),
+    /// Search the cross-surface activity log at `~/.sqlv/activity.db`.
+    History(HistoryArgs),
+    /// Schema-level diff between two SQLite files (tables, columns, indexes).
+    Diff(DiffArgs),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -243,6 +247,35 @@ pub enum MaintenanceTask {
         #[arg(long, default_value = "TRUNCATE")]
         mode: String,
     },
+}
+
+#[derive(Args, Debug)]
+pub struct HistoryArgs {
+    /// Case-insensitive substring match on the SQL text or DB path.
+    #[arg(long)]
+    pub grep: Option<String>,
+    /// Only records for queries against this DB path.
+    #[arg(long)]
+    pub db: Option<String>,
+    /// Source filter: `ui`, `agent`, `cli`.
+    #[arg(long)]
+    pub source: Option<String>,
+    /// Records from the last N minutes.
+    #[arg(long, value_name = "N")]
+    pub since_minutes: Option<i64>,
+    /// Maximum records to return (0 = all).
+    #[arg(long, default_value_t = 100)]
+    pub limit: u32,
+}
+
+#[derive(Args, Debug)]
+pub struct DiffArgs {
+    /// First (baseline) DB path.
+    #[arg(long)]
+    pub a: std::path::PathBuf,
+    /// Second DB path to compare against `--a`.
+    #[arg(long)]
+    pub b: std::path::PathBuf,
 }
 
 #[derive(Args, Debug)]

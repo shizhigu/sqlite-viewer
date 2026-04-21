@@ -1,6 +1,8 @@
 mod checkpoint;
+mod diff;
 mod dump;
 mod exec;
+mod history;
 mod import;
 mod maintenance;
 mod open;
@@ -34,6 +36,8 @@ pub fn dispatch(cli: Cli) -> Result<(), Failure> {
         Command::Import(a) => import::run(a, force_json),
         Command::Maintenance(a) => maintenance::run(a, force_json),
         Command::Checkpoint(a) => checkpoint::run(a, force_json),
+        Command::History(a) => history::run(a, force_json),
+        Command::Diff(a) => diff::run(a, force_json),
     }
 }
 

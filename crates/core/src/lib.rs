@@ -3,8 +3,10 @@
 //! All types returned by this crate are `serde::Serialize` so the same shapes
 //! flow through Tauri `invoke` responses and the CLI's `--json` output.
 
+mod activity;
 mod classify;
 mod connection;
+mod diff;
 mod dump;
 mod error;
 mod import;
@@ -16,8 +18,13 @@ mod schema;
 mod stats;
 mod value;
 
+pub use activity::{
+    default_log_path as default_activity_log_path, ActivityEntry, ActivityLog, ActivityQuery,
+    ActivityRecord,
+};
 pub use classify::{classify as classify_sql, SqlKind};
 pub use connection::{CancelHandle, Db, OpenOpts};
+pub use diff::{diff_schemas, ColumnChange, DiffReport, TableDiff};
 pub use dump::DumpFilter;
 pub use error::{Error, Result};
 pub use import::{guess_json_format, CsvImportOpts, ImportResult, JsonFormat};
