@@ -1,21 +1,17 @@
 /**
- * Last-session persistence for the desktop app.
+ * Last-session persistence, backed by `~/.sqlv/session.json`.
  *
- * We store a tiny JSON blob in localStorage that lets us reopen exactly
- * what the user had up when the app last closed: the DB file, whether
- * it was read-write, which tab they were on, and which table was in
- * the grid. Everything else (query text, staged edits, etc.) is
- * deliberately NOT persisted — those are transient or live in their
- * own stores (history, saved queries, activity.db).
- *
- * Failure modes are silent by design: an unreadable / malformed blob
- * means a cold start, and a persisted DB path that no longer exists
- * means we just drop the hydration attempt and let the user open
- * something new. Session data is a hint, never load-bearing.
+ * We used to use `localStorage`, but in `tauri dev` that got cleared
+ * often enough (HMR reloads, webview cache, origin churn) that restart
+ * would land on an empty window even though we'd clearly written state
+ * before closing. A real file in a well-known path is boring and
+ * observable — `cat ~/.sqlv/session.json` tells you exactly what's
+ * stored. Writes go through a Tauri command so the frontend doesn't
+ * need filesystem perms of its own.
  */
-import type { TabKind } from "../store/app";
+import { invoke } from "@tauri-apps/api/core";
 
-const KEY = "sqlv.session";
+import type { TabKind } from "../store/app";
 
 export interface PersistedSession {
   dbPath: string | null;
@@ -24,36 +20,27 @@ export interface PersistedSession {
   selectedTable: string | null;
 }
 
-export function loadSession(): Partial<PersistedSession> | null {
+export async function loadSession(): Promise<Partial<PersistedSession> | null> {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) {
-      console.debug("[sqlv:session] load: no session stored");
-      return null;
-    }
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return null;
-    console.debug("[sqlv:session] load:", parsed);
-    return parsed as Partial<PersistedSession>;
+    const v = await invoke<Partial<PersistedSession> | null>("session_read");
+    console.log("[sqlv:session] load:", v);
+    if (!v || typeof v !== "object") return null;
+    return v;
   } catch (e) {
     console.warn("[sqlv:session] load failed:", e);
     return null;
   }
 }
 
-export function saveSession(s: Partial<PersistedSession>): void {
+export async function saveSession(s: Partial<PersistedSession>): Promise<void> {
   try {
-    localStorage.setItem(KEY, JSON.stringify(s));
-    console.debug("[sqlv:session] save:", s);
+    await invoke("session_write", { payload: s });
+    console.log("[sqlv:session] save:", s);
   } catch (e) {
     console.warn("[sqlv:session] save failed:", e);
   }
 }
 
-export function clearSession(): void {
-  try {
-    localStorage.removeItem(KEY);
-  } catch {
-    // ignore
-  }
+export async function clearSession(): Promise<void> {
+  await saveSession({});
 }

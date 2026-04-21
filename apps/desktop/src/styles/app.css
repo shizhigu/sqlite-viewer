@@ -677,49 +677,23 @@ button {
   .query__pending, .query__pending-dot { animation: none; }
 }
 
-/* CodeMirror wraps its own scroller — if THIS wrapper also sets
- * `overflow: auto`, the two scrollers fight over pointer mapping and
- * clicks in the middle of the visible area resolve to character
- * positions that are scrolled out of the inner view. Symptom: "I can
- * only place the cursor at the very end." Fix: outer wrapper is just
- * a frame (overflow: hidden, relative), CodeMirror's .cm-scroller
- * does all the scrolling. */
+/* Minimal wrapper — just a frame in grid-row 3. No flex, no nested
+ * selectors. CodeMirror sizes itself via the `height="100%"` prop and
+ * owns its own scroller. */
 .query__editor {
   grid-row: 3;
   position: relative;
-  overflow: hidden;
   min-height: 120px;
   border-bottom: 2px solid var(--border-strong);
-  display: flex;
-  flex-direction: column;
+  overflow: hidden;
 }
 
-/* @uiw/react-codemirror renders a wrapper with a theme-specific class
- * (`.cm-theme-light` or `.cm-theme-dark`), not a plain `.cm-theme`.
- * Match either so the wrapper fills the flex parent — otherwise it
- * collapses to intrinsic height, CodeMirror's `getBoundingClientRect`
- * returns a useless rect, and mousedown coordinates map to the wrong
- * character (or snap to end-of-content). Root cause of "I can only
- * put the cursor at the end of the line". */
-.query__editor > [class*="cm-theme"],
+/* Pin the editor to fill the frame. This is all the interop CSS
+ * CodeMirror actually needs — anything else tended to fight its own
+ * layout and broke pointer-to-character mapping. */
 .query__editor .cm-editor {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.query__editor .cm-editor {
-  /* Defensive: if any ancestor has `cursor: default` inherited, CM's
-   * click-to-position handler still has to see the right cursor for
-   * HiDPI coordinate math. */
-  cursor: text;
-}
-
-.query__editor .cm-scroller {
-  overflow: auto;
-  /* CM's own scroller, kept on its own so click coordinates map 1:1
-   * with the visible content. */
+  position: absolute;
+  inset: 0;
 }
 
 .query__count-ghost {

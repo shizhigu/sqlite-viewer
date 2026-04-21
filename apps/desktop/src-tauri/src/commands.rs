@@ -286,6 +286,61 @@ pub fn activity_prune(state: State<Arc<AppState>>, cutoff_ms: i64) -> Res<u64> {
 }
 
 // ------------------------------------------------------------------
+// Session persistence — `~/.sqlv/session.json`.
+//
+// We tried localStorage first; under `tauri dev` it behaves inconsistently
+// (HMR / webview cache / origin churn can clear it). Writing a real file
+// is predictable, inspectable with `cat`, and survives every kind of dev
+// restart. The frontend holds the schema; we just shuttle an opaque JSON
+// blob through.
+// ------------------------------------------------------------------
+
+fn session_path() -> Result<std::path::PathBuf, AppError> {
+    let home = dirs::home_dir().ok_or_else(|| AppError {
+        code: "io".into(),
+        message: "no home directory".into(),
+    })?;
+    Ok(home.join(".sqlv").join("session.json"))
+}
+
+#[tauri::command]
+pub fn session_read() -> Res<Option<serde_json::Value>> {
+    let path = session_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let body = std::fs::read_to_string(&path).map_err(|e| AppError {
+        code: "io".into(),
+        message: format!("read session: {e}"),
+    })?;
+    let v: serde_json::Value = serde_json::from_str(&body).map_err(|e| AppError {
+        code: "invalid".into(),
+        message: format!("parse session: {e}"),
+    })?;
+    Ok(Some(v))
+}
+
+#[tauri::command]
+pub fn session_write(payload: serde_json::Value) -> Res<()> {
+    let path = session_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| AppError {
+            code: "io".into(),
+            message: format!("mkdir {}: {e}", parent.display()),
+        })?;
+    }
+    let body = serde_json::to_vec_pretty(&payload).map_err(|e| AppError {
+        code: "io".into(),
+        message: format!("encode session: {e}"),
+    })?;
+    std::fs::write(&path, body).map_err(|e| AppError {
+        code: "io".into(),
+        message: format!("write session: {e}"),
+    })?;
+    Ok(())
+}
+
+// ------------------------------------------------------------------
 // helpers
 // ------------------------------------------------------------------
 

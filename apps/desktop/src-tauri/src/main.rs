@@ -42,6 +42,8 @@ fn main() {
             count_rows,
             activity_query,
             activity_prune,
+            session_read,
+            session_write,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

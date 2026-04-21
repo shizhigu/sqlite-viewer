@@ -67,14 +67,14 @@ export default function App() {
     if (hydrationAttemptedRef.current) return;
     hydrationAttemptedRef.current = true;
 
-    const session = loadSession();
-    if (!session) {
-      hydratedRef.current = true;
-      return;
-    }
-
     let cancelled = false;
     (async () => {
+      const session = await loadSession();
+      if (cancelled) return;
+      if (!session) {
+        hydratedRef.current = true;
+        return;
+      }
       try {
         if (session.activeTab) setActiveTab(session.activeTab);
 
