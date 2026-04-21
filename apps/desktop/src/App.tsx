@@ -143,14 +143,21 @@ export default function App() {
   // Gated on hydratedRef so state settling DURING restoration doesn't
   // overwrite the localStorage we just read.
   useEffect(() => {
+    console.log("[sqlv:session] subscribe registered");
     const unsub = useAppStore.subscribe((state) => {
-      if (!hydratedRef.current) return;
       const next = {
         dbPath: state.meta?.path ?? null,
         readWrite: state.readWrite,
         activeTab: state.activeTab,
         selectedTable: state.selectedTable,
       };
+      console.log(
+        "[sqlv:session] subscribe fire  hydrated=",
+        hydratedRef.current,
+        " next=",
+        next,
+      );
+      if (!hydratedRef.current) return;
       const prev = lastSavedRef.current;
       if (
         prev &&
@@ -164,7 +171,10 @@ export default function App() {
       lastSavedRef.current = next;
       saveSession(next);
     });
-    return unsub;
+    return () => {
+      console.log("[sqlv:session] subscribe cleanup");
+      unsub();
+    };
   }, []);
 
   // Apply theme mode to the document root. `auto` removes the attribute so
