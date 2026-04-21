@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 use std::time::Instant;
 
@@ -7,6 +8,24 @@ use serde::Serialize;
 use crate::connection::{quote_ident, Db};
 use crate::error::{Error, Result};
 use crate::value::Value;
+
+#[derive(Debug, Clone, Copy)]
+pub enum JsonFormat {
+    /// File is a single JSON array: `[{...}, {...}]`.
+    Array,
+    /// Each line is a standalone JSON object (NDJSON / JSON Lines).
+    Lines,
+}
+
+/// Returns the detected format based on the file extension, or `None` if
+/// it doesn't clearly match (caller should pick a default).
+pub fn guess_json_format(path: &Path) -> Option<JsonFormat> {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("jsonl") | Some("ndjson") => Some(JsonFormat::Lines),
+        Some("json") => Some(JsonFormat::Array),
+        _ => None,
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ImportResult {
@@ -150,5 +169,133 @@ impl Db {
             elapsed_ms: start.elapsed().as_millis() as u64,
             columns,
         })
+    }
+
+    /// Import rows from a JSON file into `table`. Two modes:
+    ///
+    /// - `JsonFormat::Array` — the file is a single JSON array of objects.
+    /// - `JsonFormat::Lines` — each line is a standalone JSON object (NDJSON).
+    ///
+    /// The keys of the *first* record determine the column order. Objects
+    /// missing a key insert NULL; extra keys are ignored. Values are mapped
+    /// via `Value::from_json` — integers stay integers, nested objects
+    /// collapse to their JSON string form (for TEXT affinity).
+    ///
+    /// Transactional: any parse or INSERT error rolls back the whole file.
+    pub fn import_json(
+        &self,
+        path: &Path,
+        table: &str,
+        format: JsonFormat,
+    ) -> Result<ImportResult> {
+        if self.is_read_only() {
+            return Err(Error::ReadOnly);
+        }
+        let _ = self.schema(table)?; // validate existence early
+        let records = parse_json_records(path, format)?;
+        if records.is_empty() {
+            return Ok(ImportResult {
+                rows_inserted: 0,
+                elapsed_ms: 0,
+                columns: Vec::new(),
+            });
+        }
+
+        // First object's keys define column order.
+        let columns: Vec<String> = records[0]
+            .as_object()
+            .ok_or_else(|| Error::Invalid("first JSON record is not an object".into()))?
+            .keys()
+            .cloned()
+            .collect();
+
+        let qcols = columns
+            .iter()
+            .map(|c| quote_ident(c))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let placeholders = (1..=columns.len())
+            .map(|i| format!("?{i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "INSERT INTO {} ({qcols}) VALUES ({placeholders})",
+            quote_ident(table)
+        );
+
+        let start = Instant::now();
+        let conn = self.conn();
+        conn.execute_batch("BEGIN IMMEDIATE")?;
+
+        let mut stmt = conn.prepare(&sql).map_err(|e| {
+            let _ = conn.execute_batch("ROLLBACK");
+            Error::from(e)
+        })?;
+        let mut count: u64 = 0;
+        for rec in &records {
+            let Some(obj) = rec.as_object() else {
+                drop(stmt);
+                let _ = conn.execute_batch("ROLLBACK");
+                return Err(Error::Invalid("JSON record is not an object".into()));
+            };
+            let params: Vec<Value> = columns
+                .iter()
+                .map(|c| obj.get(c).map(Value::from_json).unwrap_or(Value::Null))
+                .collect();
+            match stmt.execute(rusqlite::params_from_iter(params.iter())) {
+                Ok(_) => count += 1,
+                Err(e) => {
+                    drop(stmt);
+                    let _ = conn.execute_batch("ROLLBACK");
+                    return Err(Error::from(e));
+                }
+            }
+        }
+        drop(stmt);
+        conn.execute_batch("COMMIT")?;
+
+        Ok(ImportResult {
+            rows_inserted: count,
+            elapsed_ms: start.elapsed().as_millis() as u64,
+            columns,
+        })
+    }
+}
+
+fn parse_json_records(path: &Path, format: JsonFormat) -> Result<Vec<serde_json::Value>> {
+    let file = File::open(path)?;
+    match format {
+        JsonFormat::Array => {
+            let mut buf = String::new();
+            BufReader::new(file)
+                .take(256 * 1024 * 1024) // 256 MiB cap on array-mode imports
+                .read_to_string(&mut buf)?;
+            let v: serde_json::Value = serde_json::from_str(&buf)
+                .map_err(|e| Error::Invalid(format!("JSON parse error: {e}")))?;
+            let arr = v
+                .as_array()
+                .ok_or_else(|| {
+                    Error::Invalid(
+                        "JSON root is not an array (use --format jsonl for NDJSON)".into(),
+                    )
+                })?
+                .clone();
+            Ok(arr)
+        }
+        JsonFormat::Lines => {
+            let mut out = Vec::new();
+            for (i, line) in BufReader::new(file).lines().enumerate() {
+                let line = line.map_err(Error::Io)?;
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                let v: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| {
+                    Error::Invalid(format!("JSONL parse error on line {}: {e}", i + 1))
+                })?;
+                out.push(v);
+            }
+            Ok(out)
+        }
     }
 }

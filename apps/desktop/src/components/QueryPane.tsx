@@ -7,12 +7,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { append as recordHistory } from "../lib/history";
 import { cmSchemaFromMap } from "../lib/loadSchemas";
+import { save as saveQuery } from "../lib/saved";
 import { sqlFold } from "../lib/sqlFold";
 import type { AppError, QueryResult, Value } from "../lib/tauri";
 import { tauri } from "../lib/tauri";
 import { useAppStore } from "../store/app";
 
 import { HistoryPalette } from "./HistoryPalette";
+import { SavedQueriesPalette } from "./SavedQueriesPalette";
 
 export function QueryPane() {
   const meta = useAppStore((s) => s.meta);
@@ -27,6 +29,7 @@ export function QueryPane() {
   const [params, setParams] = useState<string[]>([]);
   const [pushedBadge, setPushedBadge] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [savedPaletteOpen, setSavedPaletteOpen] = useState(false);
   const [pendingPush, setPendingPush] = useState<{
     sql: string;
     token: number;
@@ -43,17 +46,35 @@ export function QueryPane() {
   const lastTokenRef = useRef<number | null>(null);
   const dark = useTheme();
 
-  // ⌘P opens the history palette.
+  const pushToastAction = useAppStore((s) => s.pushToast);
+
+  const promptAndSave = () => {
+    if (!meta) return;
+    const name = window.prompt("Save this query as:", "");
+    if (!name) return;
+    saveQuery(meta.path, { name, sql: text });
+    pushToastAction("success", `Saved "${name.trim()}"`);
+  };
+
+  // ⌘P opens history, ⌘S opens saved queries, ⌘⇧S saves current.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === "p" || e.key === "P")) {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && (e.key === "p" || e.key === "P")) {
         e.preventDefault();
         setPaletteOpen((o) => !o);
+      } else if (mod && e.shiftKey && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        promptAndSave();
+      } else if (mod && !e.shiftKey && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        setSavedPaletteOpen((o) => !o);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta?.path, text]);
 
   // When a pushed query arrives from `sqlv push`, mirror it into the editor
   // and show the result. Dedup by token so each push triggers exactly once.
@@ -187,8 +208,25 @@ export function QueryPane() {
         <span style={{ flex: 1 }} />
         <button
           className="btn"
+          onClick={promptAndSave}
+          title="⌘⇧S — save this query"
+          disabled={!meta}
+        >
+          Save
+        </button>
+        <button
+          className="btn"
+          onClick={() => setSavedPaletteOpen(true)}
+          title="⌘S — open saved queries"
+          disabled={!meta}
+        >
+          ⌘S Saved
+        </button>
+        <button
+          className="btn"
           onClick={() => setPaletteOpen(true)}
-          title="⌘P — open query history"
+          title="⌘P — query history"
+          disabled={!meta}
         >
           ⌘P History
         </button>
@@ -303,7 +341,18 @@ export function QueryPane() {
       <HistoryPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
-        onPick={(entry) => setText(entry.sql)}
+        onPick={(entry) => {
+          setText(entry.sql);
+          dirtyRef.current = false;
+        }}
+      />
+      <SavedQueriesPalette
+        open={savedPaletteOpen}
+        onClose={() => setSavedPaletteOpen(false)}
+        onPick={(entry) => {
+          setText(entry.sql);
+          dirtyRef.current = false;
+        }}
       />
     </div>
   );
