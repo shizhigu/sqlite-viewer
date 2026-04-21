@@ -694,15 +694,32 @@ button {
   flex-direction: column;
 }
 
-.query__editor > .cm-theme,
+/* @uiw/react-codemirror renders a wrapper with a theme-specific class
+ * (`.cm-theme-light` or `.cm-theme-dark`), not a plain `.cm-theme`.
+ * Match either so the wrapper fills the flex parent — otherwise it
+ * collapses to intrinsic height, CodeMirror's `getBoundingClientRect`
+ * returns a useless rect, and mousedown coordinates map to the wrong
+ * character (or snap to end-of-content). Root cause of "I can only
+ * put the cursor at the end of the line". */
+.query__editor > [class*="cm-theme"],
 .query__editor .cm-editor {
   flex: 1;
   min-height: 0;
   width: 100%;
+  height: 100%;
+}
+
+.query__editor .cm-editor {
+  /* Defensive: if any ancestor has `cursor: default` inherited, CM's
+   * click-to-position handler still has to see the right cursor for
+   * HiDPI coordinate math. */
+  cursor: text;
 }
 
 .query__editor .cm-scroller {
   overflow: auto;
+  /* CM's own scroller, kept on its own so click coordinates map 1:1
+   * with the visible content. */
 }
 
 .query__count-ghost {
