@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install Linux Tauri system deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            pkg-config
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-${{ matrix.os }}
+
+      - name: cargo fmt
+        run: cargo fmt --all --check
+
+      - name: cargo clippy (core + CLI)
+        run: cargo clippy -p sqlv-core -p sqlv-cli --all-targets -- -D warnings
+
+      - name: cargo clippy (desktop backend)
+        run: cargo clippy -p sqlv-desktop --all-targets -- -D warnings
+
+      - name: cargo test (core + CLI)
+        run: cargo test -p sqlv-core -p sqlv-cli --locked
+
+      - name: cargo check (desktop backend)
+        run: cargo check -p sqlv-desktop --locked
+
+  frontend:
+    name: Frontend (desktop)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install deps
+        working-directory: apps/desktop
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: apps/desktop
+        run: bun run typecheck
+
+      - name: Unit tests
+        working-directory: apps/desktop
+        run: bun run test
+
+      - name: Vite build
+        working-directory: apps/desktop
+        run: bun run build

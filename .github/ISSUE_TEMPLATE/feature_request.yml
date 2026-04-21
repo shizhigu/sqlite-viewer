@@ -1,0 +1,38 @@
+name: ✨ Feature request
+description: Suggest an improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the [README roadmap](../README.md#roadmap) first — it lists things we've explicitly decided NOT to do.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What user problem does this solve?
+      description: "In one sentence: what's frustrating right now, and for whom?"
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What does the UX look like — the CLI flag, the UI gesture, or the MCP tool?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else did you think about? Why did you discard it?
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface is this for?
+      multiple: true
+      options:
+        - CLI
+        - Desktop app
+        - MCP server
+        - SKILL.md
+        - Documentation

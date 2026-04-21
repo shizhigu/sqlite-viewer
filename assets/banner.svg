@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="420" viewBox="0 0 1600 420">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#0a0a0c"/>
+      <stop offset="55%" stop-color="#12162a"/>
+      <stop offset="100%" stop-color="#1d355f"/>
+    </linearGradient>
+    <linearGradient id="wordmark" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#3d8eff"/>
+      <stop offset="50%"  stop-color="#7a6bff"/>
+      <stop offset="100%" stop-color="#ff5e85"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"  stop-color="#ffaa44"/>
+      <stop offset="100%" stop-color="#ff5e58"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff" stroke-width="0.5" opacity="0.06"/>
+    </pattern>
+  </defs>
+
+  <rect width="1600" height="420" fill="url(#bg)"/>
+  <rect width="1600" height="420" fill="url(#grid)"/>
+
+  <!-- terminal frame -->
+  <g transform="translate(100, 80)">
+    <rect width="1400" height="260" rx="14" ry="14" fill="#1a1a1f" stroke="#2a2a30" stroke-width="1.5"/>
+    <rect width="1400" height="36" rx="14" ry="14" fill="#232329"/>
+    <rect y="26" width="1400" height="10" fill="#232329"/>
+    <circle cx="22" cy="18" r="6" fill="#ff5e58"/>
+    <circle cx="44" cy="18" r="6" fill="#ffaa44"/>
+    <circle cx="66" cy="18" r="6" fill="#4cd07a"/>
+    <text x="700" y="23" text-anchor="middle" font-family="SF Mono, Menlo, monospace" font-size="12" fill="#6b6b70">sqlite-viewer — shared between you and your agent</text>
+
+    <!-- wordmark -->
+    <text x="700" y="170" text-anchor="middle" font-family="SF Mono, Menlo, ui-monospace, monospace" font-size="140" font-weight="800" letter-spacing="-6" fill="url(#wordmark)">sqlv</text>
+
+    <!-- subtitle + blinking cursor -->
+    <text x="700" y="218" text-anchor="middle" font-family="SF Mono, Menlo, monospace" font-size="18" font-weight="500" fill="#e5e5e7" letter-spacing="2">a SQLite viewer built for you <tspan fill="#ff5e58">and</tspan> your coding agent</text>
+
+    <!-- tagline row -->
+    <g transform="translate(700, 240)">
+      <text text-anchor="middle" font-family="SF Mono, Menlo, monospace" font-size="12" fill="#9a9aa0" letter-spacing="4">NATIVE · RUST + TAURI · MIT · AGENT-FIRST</text>
+    </g>
+  </g>
+
+  <!-- accent corner ribbon -->
+  <g transform="translate(1420, 40)">
+    <rect width="140" height="28" rx="14" fill="url(#accent)"/>
+    <text x="70" y="18" text-anchor="middle" font-family="SF Mono, Menlo, monospace" font-size="12" font-weight="700" fill="#0a0a0c" letter-spacing="1.5">v0.1.0 · alpha</text>
+  </g>
+</svg>

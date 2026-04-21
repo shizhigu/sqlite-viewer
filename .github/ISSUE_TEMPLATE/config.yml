@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Ask a question
+    url: https://github.com/shizhigu/sqlite-viewer/discussions
+    about: For general questions and discussion, open a Discussion instead of an issue.
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/shizhigu/sqlite-viewer/security/advisories/new
+    about: Please do not open a public issue for security reports.

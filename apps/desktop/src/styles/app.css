@@ -1,0 +1,697 @@
+/* Global + layout + component styles. See /docs/DESIGN.md. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+kbd,
+code,
+pre,
+.mono {
+  font-family: var(--font-mono);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+  border-radius: var(--r-sm);
+}
+
+/* ---- app shell ---- */
+
+.app {
+  display: grid;
+  /* minmax(0, 1fr) so the middle track can actually shrink-to-fit and allow
+     inner scroll containers to work. A bare `1fr` means `minmax(auto, 1fr)`,
+     which lets a tall child expand the track instead of scrolling. */
+  grid-template-rows: 40px minmax(0, 1fr) 24px;
+  height: 100%;
+  min-width: 880px;
+  min-height: 560px;
+  position: relative;
+}
+
+/* Hard, unmistakable signal of write mode: a 3 px warning bar across the very
+   top of the window. Hidden in read-only. */
+.app[data-mode="rw"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--warning);
+  z-index: 100;
+  pointer-events: none;
+}
+
+.app__middle {
+  display: grid;
+  grid-template-columns: var(--sidebar-w, 260px) minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  border-top: 2px solid var(--border-strong);
+  border-bottom: 2px solid var(--border-strong);
+}
+
+/* ---- Toolbar ---- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 0 var(--s-3);
+  background: var(--bg-panel);
+  border-bottom: 2px solid var(--border-strong);
+}
+
+.toolbar__left,
+.toolbar__right {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.toolbar__right {
+  margin-left: auto;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  height: 28px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-md);
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition: background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+
+.btn:hover {
+  border-color: var(--text);
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--text-inverse);
+  border-color: var(--accent);
+  font-weight: 500;
+}
+
+.btn--primary:hover {
+  filter: brightness(1.05);
+}
+
+/* Filled red — destructive actions should be unambiguous when active. */
+.btn--danger:not(:disabled) {
+  background: var(--danger);
+  color: var(--text-inverse);
+  border-color: var(--danger);
+  font-weight: 500;
+}
+
+.btn--danger:not(:disabled):hover {
+  filter: brightness(1.05);
+}
+
+/* When disabled, fall back to a ghost outline so users still read "danger"
+   but understand the action isn't available yet. */
+.btn--danger:disabled {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: transparent;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  height: 24px;
+  padding: 0 var(--s-2);
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg-panel);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text);
+  max-width: 300px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chip--mode-ro {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.chip--mode-rw {
+  background: var(--warning);
+  color: var(--text-inverse);
+  border-color: var(--warning);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 35%, transparent);
+}
+
+/* ---- Sidebar / SchemaTree ---- */
+
+.sidebar {
+  background: var(--bg-panel);
+  border-right: 2px solid var(--border-strong);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar__filter {
+  padding: var(--s-2) var(--s-2) var(--s-1);
+  border-bottom: 1.5px solid var(--border);
+}
+
+.sidebar__filter input {
+  width: 100%;
+  height: 26px;
+  padding: 0 var(--s-2);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.tree-group {
+  padding: var(--s-2) 0 var(--s-1);
+}
+
+.tree-group__header {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  width: 100%;
+  padding: 0 var(--s-2);
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  height: 22px;
+}
+
+.tree-group__caret {
+  display: inline-block;
+  width: 10px;
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.tree-group--open .tree-group__caret {
+  transform: rotate(90deg);
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0 var(--s-3);
+  height: 28px;
+  cursor: pointer;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  text-align: left;
+  position: relative;
+}
+
+.tree-row:hover {
+  background: var(--bg-row-alt);
+}
+
+.tree-row--selected {
+  background: var(--bg-row-selected);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.tree-row--selected::before {
+  content: "";
+  position: absolute;
+  inset: 2px auto 2px 0;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.tree-row__count {
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+/* ---- Tabs + content ---- */
+
+.content {
+  display: grid;
+  grid-template-rows: 32px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.content > :nth-child(2) {
+  /* The active pane lives here. Give it hard bounds so its inner
+     scroll containers (grid, schema-pane, query editor) work.
+     Do NOT impose `display`: each pane picks its own layout mode, and
+     overriding it here would clobber .query's grid layout (which breaks
+     CodeMirror's internal hit-testing). */
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tabs {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 2px solid var(--border-strong);
+  background: var(--bg-panel);
+  gap: 0;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--s-4);
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab--active {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+.tab-panel {
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- DataGrid ---- */
+
+.grid {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-panel);
+}
+
+.grid__scroll {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+
+.grid table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.grid th,
+.grid td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 400px;
+}
+
+.grid th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-panel);
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 2px solid var(--border-strong);
+  letter-spacing: 0.02em;
+}
+
+.grid th .col-type {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+
+.grid th .col-badge {
+  color: var(--accent);
+  margin-right: var(--s-1);
+}
+
+.grid tr:nth-child(odd) td {
+  background: var(--bg-panel);
+}
+.grid tr:nth-child(even) td {
+  background: var(--bg-row-alt);
+}
+
+.grid tr.grid-row--selected td {
+  background: var(--bg-row-selected) !important;
+}
+
+.grid tr.grid-row--editing td {
+  background: var(--bg-row-editing) !important;
+}
+
+.grid td.cell--null {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.grid td.cell--blob {
+  color: var(--text-muted);
+}
+
+.grid td.cell--editable {
+  cursor: text;
+}
+
+.grid td.cell--locked {
+  cursor: not-allowed;
+  color: var(--text-muted);
+}
+
+.grid td.cell--fk .cell-value {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.cell-fk-link {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  padding: 0 4px 0 0;
+  font-weight: 700;
+}
+
+.cell-fk-link:hover {
+  color: var(--text);
+}
+
+.grid td input.cell-input {
+  width: 100%;
+  border: 2px solid var(--accent);
+  border-radius: 2px;
+  padding: 2px 4px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.grid td input.cell-input.invalid {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.grid__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 4px var(--s-3);
+  height: 32px;
+  border-top: 2px solid var(--border-strong);
+  background: var(--bg-panel);
+  font-size: var(--text-xs);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.grid__footer .spacer {
+  flex: 1;
+}
+
+.grid__banner {
+  padding: 6px var(--s-3);
+  background: var(--warning);
+  color: var(--text-inverse);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.grid__empty {
+  padding: var(--s-7) var(--s-4);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* ---- QueryPane ---- */
+
+.query {
+  display: grid;
+  /* 4 fixed tracks. Explicit grid-row on each child so the layout doesn't
+     depend on DOM order or on whether `.query__params` is rendered — grid
+     auto-placement would otherwise pull results into row 3 and collapse
+     the editor when params are absent. */
+  grid-template-rows: auto minmax(120px, 1fr) auto minmax(0, 40%);
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-panel);
+}
+
+.query__toolbar {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 2px solid var(--border-strong);
+}
+
+.query__editor {
+  grid-row: 2;
+  overflow: auto;
+  min-height: 120px;
+  border-bottom: 2px solid var(--border-strong);
+}
+
+.query__params {
+  grid-row: 3;
+  display: flex;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 2px solid var(--border-strong);
+  font-size: var(--text-xs);
+  color: var(--text);
+  overflow-x: auto;
+}
+
+.query__param {
+  display: inline-flex;
+  gap: var(--s-1);
+  align-items: center;
+}
+
+.query__param input {
+  width: 120px;
+  height: 22px;
+  padding: 0 var(--s-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.query__results {
+  grid-row: 4;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.query__error {
+  padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-left: 4px solid var(--danger);
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: pre-wrap;
+}
+
+/* ---- SchemaPane ---- */
+
+.schema-pane {
+  overflow: auto;
+  padding: var(--s-4);
+  background: var(--bg);
+}
+
+.schema-section {
+  background: var(--bg-panel);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--r-md);
+  padding: var(--s-3);
+  margin-bottom: var(--s-3);
+  box-shadow: var(--shadow-sm);
+}
+
+.schema-section h3 {
+  margin: 0 0 var(--s-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.schema-section table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.schema-section th,
+.schema-section td {
+  padding: 4px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.schema-section tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ---- StatusBar ---- */
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 0 var(--s-3);
+  background: var(--bg-panel);
+  font-size: var(--text-xs);
+  color: var(--text);
+  font-weight: 500;
+  border-top: 2px solid var(--border-strong);
+}
+
+.status .right {
+  margin-left: auto;
+  font-family: var(--font-mono);
+}
+
+/* ---- Empty + toast ---- */
+
+.empty-state {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  padding: var(--s-7);
+  text-align: center;
+}
+
+.toasts {
+  position: fixed;
+  top: 50px;
+  right: var(--s-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--bg-panel);
+  border: 2px solid var(--border-strong);
+  box-shadow: var(--shadow-md);
+  max-width: 340px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* Loud error — filled red. The whole point is that you cannot miss it. */
+.toast--error {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--text-inverse);
+  box-shadow: var(--shadow-md), 0 0 0 3px color-mix(in srgb, var(--danger) 25%, transparent);
+}
+
+.toast--success {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--text-inverse);
+}

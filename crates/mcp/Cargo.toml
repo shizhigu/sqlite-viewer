@@ -1,0 +1,16 @@
+[package]
+name = "sqlv-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "sqlv-mcp: MCP (Model Context Protocol) stdio server exposing sqlv-core as tools."
+
+[[bin]]
+name = "sqlv-mcp"
+path = "src/main.rs"
+
+[dependencies]
+sqlv-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true

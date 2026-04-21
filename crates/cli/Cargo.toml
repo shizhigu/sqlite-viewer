@@ -1,0 +1,28 @@
+[package]
+name = "sqlv-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "sqlv: agent-friendly command-line SQLite client."
+
+[[bin]]
+name = "sqlv"
+path = "src/main.rs"
+
+[dependencies]
+sqlv-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+
+clap = { version = "4", features = ["derive"] }
+is-terminal = "0.4"
+comfy-table = "7"
+ureq = { version = "2", default-features = false, features = ["json"] }
+dirs = "5"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"

@@ -1,0 +1,28 @@
+[package]
+name = "sqlv-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "SQLite Viewer desktop app (Tauri)"
+
+[[bin]]
+name = "sqlv-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+sqlv-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tiny_http = "0.12"
+dirs = "5"
+getrandom = "0.2"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
