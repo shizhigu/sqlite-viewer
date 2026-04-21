@@ -85,6 +85,8 @@ export default function App() {
       token: number;
       pending?: boolean;
       kind?: "read_only" | "mutating";
+      plan?: { id: number; parent: number; detail: string }[];
+      affects?: { table: string; count: number };
     }>("pushed-query", (e) => {
       setPushedQuery({
         sql: e.payload.sql,
@@ -93,6 +95,8 @@ export default function App() {
         token: e.payload.token,
         pending: e.payload.pending,
         kind: e.payload.kind,
+        plan: e.payload.plan,
+        affects: e.payload.affects,
       });
       setActiveTab("query");
       appendActivity({

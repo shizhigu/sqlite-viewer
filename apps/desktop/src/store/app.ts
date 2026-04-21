@@ -29,6 +29,10 @@ export interface PushedQuery {
   pending?: boolean;
   /** Classifier verdict. `"mutating"` triggers the loud preview banner. */
   kind?: "read_only" | "mutating";
+  /** EXPLAIN QUERY PLAN output, populated only for pending pushes. */
+  plan?: { id: number; parent: number; detail: string }[];
+  /** For UPDATE/DELETE pending pushes: rows the WHERE would touch. */
+  affects?: { table: string; count: number };
 }
 
 /** One entry in the agent-activity log (pushed query or pushed open). */

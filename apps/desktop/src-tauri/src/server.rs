@@ -65,6 +65,27 @@ pub struct PushedEvent {
     pub pending: bool,
     /// Serialized `SqlKind` so the UI can reason about intent.
     pub kind: &'static str,
+    /// One row per node of EXPLAIN QUERY PLAN. Populated only when the
+    /// push is pending — gives the human something to judge before Run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plan: Vec<PlanNode>,
+    /// For UPDATE/DELETE pending pushes where we can parse the target,
+    /// this reports how many rows the WHERE would affect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affects: Option<AffectedRows>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct PlanNode {
+    pub id: i64,
+    pub parent: i64,
+    pub detail: String,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct AffectedRows {
+    pub table: String,
+    pub count: i64,
 }
 
 #[derive(Deserialize)]
@@ -255,7 +276,22 @@ fn handle_query(
     };
 
     if !execute {
-        // Dry-run: populate the editor and let the human approve.
+        // Dry-run: populate the editor and let the human approve. While
+        // we're here, try to get them some context to judge with: a plan
+        // tree from EXPLAIN QUERY PLAN, plus for UPDATE/DELETE a count of
+        // the rows the WHERE would actually touch.
+        let params: Vec<Value> = req.params.iter().map(Value::from_json).collect();
+        let (plan, affects) = {
+            let g = lock_state(state);
+            if let Some(db) = g.as_ref() {
+                let plan = explain_plan(db, &req.sql, &params).unwrap_or_default();
+                let affects = estimate_affected_rows(db, &req.sql, &params);
+                (plan, affects)
+            } else {
+                (Vec::new(), None)
+            }
+        };
+
         let ev = PushedEvent {
             sql: req.sql.clone(),
             result: None,
@@ -263,6 +299,8 @@ fn handle_query(
             token,
             pending: true,
             kind: kind_str,
+            plan,
+            affects,
         };
         let _ = app.emit("pushed-query", ev);
         let body = serde_json::json!({
@@ -289,6 +327,8 @@ fn handle_query(
                 token,
                 pending: false,
                 kind: kind_str,
+                plan: Vec::new(),
+                affects: None,
             };
             let _ = app.emit("pushed-query", ev);
             return Err((409, AppError::not_open()));
@@ -310,6 +350,8 @@ fn handle_query(
                 token,
                 pending: false,
                 kind: kind_str,
+                plan: Vec::new(),
+                affects: None,
             };
             let _ = app.emit("pushed-query", ev);
             Ok(json_ok(&result))
@@ -323,6 +365,8 @@ fn handle_query(
                 token,
                 pending: false,
                 kind: kind_str,
+                plan: Vec::new(),
+                affects: None,
             };
             let _ = app.emit("pushed-query", ev);
             let status = match err.code.as_str() {
@@ -333,6 +377,123 @@ fn handle_query(
             Err((status, err))
         }
     }
+}
+
+/// Flatten `EXPLAIN QUERY PLAN <sql>` to a vector of nodes. Errors get
+/// swallowed — we're opportunistic here; the preview banner is useful
+/// even when EXPLAIN fails.
+fn explain_plan(db: &Db, sql: &str, params: &[Value]) -> Option<Vec<PlanNode>> {
+    let full = format!("EXPLAIN QUERY PLAN {sql}");
+    // Plans are small; cap defensively so a runaway EXPLAIN can't blow
+    // memory while the user stares at the preview banner.
+    let page = Page {
+        limit: 500,
+        offset: 0,
+    };
+    let r = db.query(&full, params, page).ok()?;
+    let mut nodes = Vec::new();
+    for row in r.rows {
+        // PRAGMA shape: (id, parent, notused, detail). Defensive unwraps.
+        if row.len() < 4 {
+            continue;
+        }
+        let id = match row[0] {
+            Value::Integer(i) => i,
+            _ => 0,
+        };
+        let parent = match row[1] {
+            Value::Integer(i) => i,
+            _ => 0,
+        };
+        let detail = match &row[3] {
+            Value::Text(s) => s.clone(),
+            _ => String::new(),
+        };
+        nodes.push(PlanNode { id, parent, detail });
+    }
+    Some(nodes)
+}
+
+/// For simple UPDATE / DELETE shapes, return the count of rows the WHERE
+/// clause matches. Handles the 80% case via regex — complex queries
+/// (subqueries, aliases, multi-table DELETE) just don't get an estimate,
+/// which is the correct failure mode.
+fn estimate_affected_rows(db: &Db, sql: &str, params: &[Value]) -> Option<AffectedRows> {
+    // Trim trailing semicolons / whitespace for matching.
+    let trimmed = sql.trim().trim_end_matches(';').trim();
+    let upper = trimmed.to_ascii_uppercase();
+
+    // UPDATE <table> SET … WHERE …
+    let (table, where_clause) = if upper.starts_with("UPDATE") {
+        let rest = &trimmed[6..];
+        let (table, after) = take_ident(rest)?;
+        let after_upper = after.to_ascii_uppercase();
+        let set_idx = after_upper.find("SET")?;
+        let where_idx = after_upper.find("WHERE")?;
+        if where_idx <= set_idx {
+            return None;
+        }
+        (table, &after[where_idx + 5..])
+    } else if upper.starts_with("DELETE FROM") {
+        let rest = &trimmed[11..];
+        let (table, after) = take_ident(rest.trim_start())?;
+        let after_upper = after.to_ascii_uppercase();
+        let where_idx = after_upper.find("WHERE")?;
+        (table, &after[where_idx + 5..])
+    } else {
+        return None;
+    };
+
+    let count_sql = format!(
+        "SELECT COUNT(*) FROM {} WHERE {}",
+        quote_ident_best_effort(&table),
+        where_clause.trim()
+    );
+    let page = Page::default();
+    let res = db.query(&count_sql, params, page).ok()?;
+    let count = match res.rows.first().and_then(|r| r.first()) {
+        Some(Value::Integer(n)) => *n,
+        _ => return None,
+    };
+    Some(AffectedRows { table, count })
+}
+
+fn take_ident(s: &str) -> Option<(String, &str)> {
+    let s = s.trim_start();
+    let mut chars = s.char_indices();
+    let mut end = 0;
+    let mut name = String::new();
+    if let Some((_, c)) = chars.next() {
+        if c == '"' {
+            // Quoted identifier.
+            for (i, cc) in chars {
+                end = i + cc.len_utf8();
+                if cc == '"' {
+                    return Some((name, &s[end..]));
+                }
+                name.push(cc);
+            }
+            return None;
+        } else if c.is_ascii_alphabetic() || c == '_' {
+            name.push(c);
+            end = c.len_utf8();
+        } else {
+            return None;
+        }
+    }
+    for (i, c) in chars {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            name.push(c);
+            end = i + c.len_utf8();
+        } else {
+            break;
+        }
+    }
+    Some((name, &s[end..]))
+}
+
+fn quote_ident_best_effort(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
 }
 
 fn handle_open(

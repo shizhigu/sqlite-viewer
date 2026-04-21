@@ -37,9 +37,11 @@ export function QueryPane() {
   // When an agent pushed a mutating query in `auto` mode, the server DOES
   // NOT execute it — instead we populate the editor and show a prominent
   // "Agent proposed this write" banner so the human approves explicitly.
-  const [previewPending, setPreviewPending] = useState<
-    { kind: "read_only" | "mutating" } | null
-  >(null);
+  const [previewPending, setPreviewPending] = useState<{
+    kind: "read_only" | "mutating";
+    plan?: { id: number; parent: number; detail: string }[];
+    affects?: { table: string; count: number };
+  } | null>(null);
   // True whenever the editor text has diverged from "clean" state (a push
   // landed, or a replay, or — once the user starts typing — anything).
   const dirtyRef = useRef(false);
@@ -99,7 +101,11 @@ export function QueryPane() {
       // Agent proposed a write. Wait for the human to click Run.
       setResult(null);
       setError(null);
-      setPreviewPending({ kind: pushedQuery.kind ?? "mutating" });
+      setPreviewPending({
+        kind: pushedQuery.kind ?? "mutating",
+        plan: pushedQuery.plan,
+        affects: pushedQuery.affects,
+      });
     } else {
       setResult(pushedQuery.result);
       setError(pushedQuery.error);
@@ -254,27 +260,56 @@ export function QueryPane() {
           className={`query__preview query__preview--${previewPending.kind}`}
           role="alert"
         >
-          <span className="query__preview-icon" aria-hidden>
-            {previewPending.kind === "mutating" ? "⚠" : "↓"}
-          </span>
-          <span>
-            <strong>
-              Agent proposed a{" "}
-              {previewPending.kind === "mutating" ? "write" : "query"}
-            </strong>{" "}
-            — review the editor, then Run (⌘⏎) to execute, or edit first.
-          </span>
-          <span style={{ flex: 1 }} />
-          <button
-            className="btn"
-            onClick={() => {
-              setPreviewPending(null);
-              setText("");
-              dirtyRef.current = false;
-            }}
-          >
-            Discard
-          </button>
+          <div className="query__preview-row">
+            <span className="query__preview-icon" aria-hidden>
+              {previewPending.kind === "mutating" ? "⚠" : "↓"}
+            </span>
+            <span>
+              <strong>
+                Agent proposed a{" "}
+                {previewPending.kind === "mutating" ? "write" : "query"}
+              </strong>{" "}
+              — review, then Run (⌘⏎), or edit first.
+            </span>
+            {previewPending.affects && (
+              <span className="query__preview-affects">
+                affects{" "}
+                <strong>
+                  {previewPending.affects.count.toLocaleString()}
+                </strong>{" "}
+                row
+                {previewPending.affects.count === 1 ? "" : "s"} in{" "}
+                <code className="mono">{previewPending.affects.table}</code>
+              </span>
+            )}
+            <span style={{ flex: 1 }} />
+            <button
+              className="btn"
+              onClick={() => {
+                setPreviewPending(null);
+                setText("");
+                dirtyRef.current = false;
+              }}
+            >
+              Discard
+            </button>
+          </div>
+          {previewPending.plan && previewPending.plan.length > 0 && (
+            <details className="query__preview-plan">
+              <summary>
+                query plan ({previewPending.plan.length} node
+                {previewPending.plan.length === 1 ? "" : "s"})
+              </summary>
+              <pre className="mono">
+                {previewPending.plan
+                  .map(
+                    (n) =>
+                      "  ".repeat(depthOf(n, previewPending.plan!)) + n.detail,
+                  )
+                  .join("\n")}
+              </pre>
+            </details>
+          )}
         </div>
       )}
       <div
@@ -415,6 +450,24 @@ function formatResultValue(v: Value): string {
 function truncateForPill(s: string, n = 80): string {
   const one = s.replace(/\s+/g, " ").trim();
   return one.length <= n ? one : one.slice(0, n - 1) + "…";
+}
+
+/** Depth of a plan node in the parent chain (root = 0). Caps at 8 to
+ *  defend against malformed / cyclic input. SQLite's plans are ≤ 4 deep. */
+function depthOf(
+  node: { id: number; parent: number; detail: string },
+  nodes: { id: number; parent: number; detail: string }[],
+): number {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  let d = 0;
+  let cur = node.parent;
+  while (cur !== 0 && d < 8) {
+    d++;
+    const p = byId.get(cur);
+    if (!p) break;
+    cur = p.parent;
+  }
+  return d;
 }
 
 /**
