@@ -1,6 +1,8 @@
+mod checkpoint;
 mod dump;
 mod exec;
 mod import;
+mod maintenance;
 mod open;
 mod pragma;
 mod push;
@@ -30,6 +32,8 @@ pub fn dispatch(cli: Cli) -> Result<(), Failure> {
         Command::Push(a) => push::query(a, force_json),
         Command::PushOpen(a) => push::open(a, force_json),
         Command::Import(a) => import::run(a, force_json),
+        Command::Maintenance(a) => maintenance::run(a, force_json),
+        Command::Checkpoint(a) => checkpoint::run(a, force_json),
     }
 }
 

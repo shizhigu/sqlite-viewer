@@ -103,6 +103,19 @@ impl Db {
             return Err(Error::Invalid("no columns to import".into()));
         }
 
+        // Declared type per CSV column position, looked up in the target
+        // table's schema. Used to coerce raw CSV strings to matching
+        // storage classes so STRICT tables accept the INSERT.
+        let decl_by_name: std::collections::HashMap<&str, Option<String>> = schema
+            .columns
+            .iter()
+            .map(|c| (c.name.as_str(), c.decl_type.clone()))
+            .collect();
+        let declared_types: Vec<Option<String>> = columns
+            .iter()
+            .map(|c| decl_by_name.get(c.as_str()).cloned().unwrap_or(None))
+            .collect();
+
         let qcols = columns
             .iter()
             .map(|c| quote_ident(c))
@@ -147,9 +160,14 @@ impl Db {
             }
             let params: Vec<Value> = rec
                 .iter()
-                .map(|s| match &opts.null_token {
-                    Some(tok) if s == tok.as_str() => Value::Null,
-                    _ => Value::Text(s.to_string()),
+                .enumerate()
+                .map(|(i, s)| {
+                    if let Some(tok) = &opts.null_token {
+                        if s == tok.as_str() {
+                            return Value::Null;
+                        }
+                    }
+                    coerce_by_affinity(s, declared_types.get(i).and_then(|o| o.as_deref()))
                 })
                 .collect();
             match stmt.execute(rusqlite::params_from_iter(params.iter())) {
@@ -260,6 +278,43 @@ impl Db {
             columns,
         })
     }
+}
+
+/// Coerce a raw CSV string into a typed `Value` based on the target
+/// column's declared type. SQLite's affinity rules are generous for
+/// non-STRICT tables (text goes in, numbers come out on query), but for
+/// STRICT tables the INSERT itself rejects a TEXT value in an INT column.
+/// This keeps CSV imports working on both.
+///
+/// Unknown or missing declared type falls back to TEXT — the most
+/// permissive storage class.
+fn coerce_by_affinity(raw: &str, decl_type: Option<&str>) -> Value {
+    let Some(t) = decl_type else {
+        return Value::Text(raw.to_string());
+    };
+    let up = t.to_ascii_uppercase();
+    // Follow SQLite's documented affinity matching (sqlite.org/datatype3.html §3.1).
+    if up.contains("INT") {
+        if let Ok(n) = raw.parse::<i64>() {
+            return Value::Integer(n);
+        }
+        // Unparseable integer — fall through to TEXT. STRICT tables will
+        // reject on INSERT; non-STRICT tables accept and coerce.
+    } else if up.contains("REAL")
+        || up.contains("FLOA")
+        || up.contains("DOUB")
+        || up.contains("NUMERIC")
+    {
+        if let Ok(f) = raw.parse::<f64>() {
+            return Value::Real(f);
+        }
+    } else if up.contains("BLOB") {
+        // CSV can't express binary; leave as TEXT. STRICT BLOB columns
+        // will reject; users should use `sqlv exec` with parameter binding
+        // for real blobs.
+    }
+    // Default, and fallback for TEXT/CHAR/VARCHAR/DATE/TIME/...
+    Value::Text(raw.to_string())
 }
 
 fn parse_json_records(path: &Path, format: JsonFormat) -> Result<Vec<serde_json::Value>> {

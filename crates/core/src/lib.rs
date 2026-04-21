@@ -25,6 +25,8 @@ pub use maintenance::MaintenanceResult;
 pub use meta::DbMeta;
 pub use pragma::PragmaValue;
 pub use query::{ExecResult, Page, QueryResult};
-pub use schema::{Column, ForeignKey, IndexInfo, TableInfo, TableKind, TableSchema, ViewInfo};
+pub use schema::{
+    Column, ForeignKey, IndexInfo, TableInfo, TableKind, TableSchema, TriggerInfo, ViewInfo,
+};
 pub use stats::{DbStats, TableStat};
 pub use value::{Value, BLOB_PREVIEW_BYTES, JSON_SAFE_INTEGER_MAX};

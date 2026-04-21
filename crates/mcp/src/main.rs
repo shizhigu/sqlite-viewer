@@ -182,6 +182,33 @@ fn tools_list() -> Value {
                 "Per-table row counts + database-level stats (size, page count, freelist).",
                 json!({ "type": "object", "properties": {} }),
             ),
+            tool_def(
+                "sqlv_push_query",
+                "Forward a SQL query to the running desktop app — mirrors in its Query tab live. Default `mode: auto` executes SELECT/EXPLAIN and stages mutating statements for human approval. Use `mode: run` to bypass the preview when already consented.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "sql": { "type": "string" },
+                        "params": { "type": "array", "items": {} },
+                        "limit": { "type": "integer", "default": 1000 },
+                        "offset": { "type": "integer", "default": 0 },
+                        "mode": { "type": "string", "enum": ["auto", "run", "pending"], "default": "auto" }
+                    },
+                    "required": ["sql"]
+                }),
+            ),
+            tool_def(
+                "sqlv_push_open",
+                "Ask the running desktop app to open a database file. Read-only by default.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "Absolute path to the .sqlite/.db file." },
+                        "read_only": { "type": "boolean", "default": true }
+                    },
+                    "required": ["path"]
+                }),
+            ),
         ]
     })
 }
@@ -217,6 +244,8 @@ fn call_tool(server: &Server, params: &Value) -> Result<Value, JsonRpcError> {
             db.stats()
                 .map(|s| serde_json::to_value(s).unwrap_or(json!(null)))
         })?,
+        "sqlv_push_query" => tool_push_query(&args)?,
+        "sqlv_push_open" => tool_push_open(&args)?,
         other => return Err(usage(&format!("unknown tool: {other}"))),
     };
 
@@ -349,4 +378,110 @@ fn wrap_result(payload: &Value) -> Value {
         "content": [{ "type": "text", "text": text }],
         "isError": false,
     })
+}
+
+// ---- Push bridge (agent → desktop over HTTP loopback) ----
+
+#[derive(serde::Deserialize)]
+struct InstanceInfo {
+    port: u16,
+    token: String,
+}
+
+fn tool_push_query(args: &Value) -> Result<Value, JsonRpcError> {
+    let sql = args
+        .get("sql")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| usage("sqlv_push_query: `sql` is required"))?;
+    let body = json!({
+        "sql": sql,
+        "params": args.get("params").cloned().unwrap_or_else(|| json!([])),
+        "limit": args.get("limit").and_then(|v| v.as_u64()).unwrap_or(1000),
+        "offset": args.get("offset").and_then(|v| v.as_u64()).unwrap_or(0),
+        "mode": args.get("mode").and_then(|v| v.as_str()).unwrap_or("auto"),
+    });
+    http_post_to_desktop("/query", &body)
+}
+
+fn tool_push_open(args: &Value) -> Result<Value, JsonRpcError> {
+    let path = args
+        .get("path")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| usage("sqlv_push_open: `path` is required"))?;
+    let read_only = args
+        .get("read_only")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let body = json!({ "path": path, "read_only": read_only });
+    http_post_to_desktop("/open", &body)
+}
+
+fn http_post_to_desktop(path: &str, body: &Value) -> Result<Value, JsonRpcError> {
+    let instances = list_instances();
+    if instances.is_empty() {
+        return Err(JsonRpcError {
+            code: -32000,
+            message: "no running desktop app found under ~/.sqlv/instances/. Start sqlv desktop and retry.".into(),
+        });
+    }
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_millis(250))
+        .timeout(std::time::Duration::from_secs(10))
+        .build();
+    let mut last: Option<String> = None;
+    for inst in &instances {
+        let url = format!("http://127.0.0.1:{}{path}", inst.port);
+        match agent
+            .post(&url)
+            .set("X-Sqlv-Token", &inst.token)
+            .send_json(body.clone())
+        {
+            Ok(resp) => {
+                let v: Value = resp.into_json().map_err(|e| JsonRpcError {
+                    code: -32000,
+                    message: format!("invalid response JSON: {e}"),
+                })?;
+                return Ok(v);
+            }
+            Err(ureq::Error::Status(_, resp)) => {
+                let v: Value = resp.into_json().unwrap_or_else(|_| json!({}));
+                // Return server's own error JSON so the agent can branch on code.
+                return Ok(v);
+            }
+            Err(e) => {
+                last = Some(e.to_string());
+            }
+        }
+    }
+    Err(JsonRpcError {
+        code: -32000,
+        message: format!(
+            "could not reach desktop: {}",
+            last.unwrap_or_else(|| "no response".into())
+        ),
+    })
+}
+
+fn list_instances() -> Vec<InstanceInfo> {
+    let Some(home) = dirs::home_dir() else {
+        return Vec::new();
+    };
+    let dir = home.join(".sqlv").join("instances");
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.extension().and_then(|s| s.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(body) = std::fs::read_to_string(&p) else {
+            continue;
+        };
+        if let Ok(info) = serde_json::from_str::<InstanceInfo>(&body) {
+            out.push(info);
+        }
+    }
+    out
 }

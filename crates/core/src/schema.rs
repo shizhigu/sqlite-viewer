@@ -26,6 +26,14 @@ pub struct ViewInfo {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct TriggerInfo {
+    pub name: String,
+    /// The table this trigger is attached to.
+    pub table: String,
+    pub sql: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Column {
     pub cid: i32,
     pub name: String,
@@ -109,6 +117,23 @@ impl Db {
             Ok(ViewInfo {
                 name: r.get(0)?,
                 sql: r.get(1)?,
+            })
+        })?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
+    /// List triggers on user tables.
+    pub fn triggers(&self) -> Result<Vec<TriggerInfo>> {
+        let mut stmt = self.conn().prepare(
+            "SELECT name, tbl_name, sql FROM sqlite_master \
+             WHERE type='trigger' AND name NOT LIKE 'sqlite_%' \
+             ORDER BY tbl_name, name",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(TriggerInfo {
+                name: r.get(0)?,
+                table: r.get(1)?,
+                sql: r.get(2)?,
             })
         })?;
         Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)

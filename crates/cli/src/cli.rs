@@ -47,8 +47,14 @@ pub enum Command {
     /// Ask the running desktop app to open a database file.
     #[command(name = "push-open")]
     PushOpen(PushOpenArgs),
-    /// Bulk-load a CSV file into a table (transactional — all-or-nothing).
+    /// Bulk-load a CSV / JSON / JSONL file into a table (transactional).
     Import(ImportArgs),
+    /// Database housekeeping: VACUUM / REINDEX / ANALYZE / integrity-check /
+    /// wal-checkpoint. Most require `--write`; integrity-check doesn't.
+    Maintenance(MaintenanceArgs),
+    /// Snapshot the DB to a new file via `VACUUM INTO`. Useful before
+    /// agent-driven mutations.
+    Checkpoint(CheckpointArgs),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -170,26 +176,82 @@ pub struct PushArgs {
 pub struct ImportArgs {
     #[command(flatten)]
     pub db: DbArgs,
-    /// Target table (must already exist with matching columns).
+    /// Target table (must already exist).
     #[arg(long)]
     pub table: String,
-    /// Path to the input file (CSV).
+    /// Path to the input file.
     pub file: std::path::PathBuf,
-    /// First row is NOT a header. Columns are then taken from the target
-    /// table in declared order.
+    /// File format. `auto` detects from extension (`.csv` / `.json` /
+    /// `.jsonl` / `.ndjson`). CSV flags (`--no-header`, `--delimiter`,
+    /// `--null-token`) only apply when the effective format is CSV.
+    #[arg(long, value_enum, default_value = "auto")]
+    pub format: ImportFormat,
+    /// First row is NOT a header. CSV only.
     #[arg(long)]
     pub no_header: bool,
-    /// Field delimiter (one byte). Default is `,`.
+    /// Field delimiter (one byte). Default is `,`. CSV only.
     #[arg(long, default_value = ",")]
     pub delimiter: String,
-    /// When set, any CSV field whose raw string equals this exact value is
-    /// inserted as NULL. Use `--null-token ""` to treat unquoted empty
-    /// fields as NULL, or `--null-token NULL` for the literal string.
+    /// CSV field that should become NULL (e.g. `""` or `"NULL"`). CSV only.
     #[arg(long, value_name = "STRING")]
     pub null_token: Option<String>,
     /// Required to open the database read-write.
     #[arg(long)]
     pub write: bool,
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportFormat {
+    Auto,
+    Csv,
+    Json,
+    Jsonl,
+    Ndjson,
+}
+
+#[derive(Args, Debug)]
+pub struct MaintenanceArgs {
+    #[command(flatten)]
+    pub db: DbArgs,
+    #[command(subcommand)]
+    pub task: MaintenanceTask,
+    /// Open the DB read-write. Required for vacuum/reindex/analyze/wal.
+    #[arg(long)]
+    pub write: bool,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum MaintenanceTask {
+    /// Rewrite the file, reclaiming free pages.
+    Vacuum,
+    /// Rebuild indexes (optionally target a single table/index).
+    Reindex {
+        #[arg(long)]
+        table: Option<String>,
+    },
+    /// Refresh query-planner statistics.
+    Analyze {
+        #[arg(long)]
+        table: Option<String>,
+    },
+    /// PRAGMA integrity_check (works on read-only connections too).
+    #[command(name = "integrity-check")]
+    IntegrityCheck,
+    /// PRAGMA wal_checkpoint(MODE).
+    #[command(name = "wal-checkpoint")]
+    WalCheckpoint {
+        #[arg(long, default_value = "TRUNCATE")]
+        mode: String,
+    },
+}
+
+#[derive(Args, Debug)]
+pub struct CheckpointArgs {
+    #[command(flatten)]
+    pub db: DbArgs,
+    /// Destination path for the snapshot file. Overwritten if it exists.
+    #[arg(long)]
+    pub to: std::path::PathBuf,
 }
 
 #[derive(Args, Debug)]

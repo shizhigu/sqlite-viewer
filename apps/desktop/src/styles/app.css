@@ -872,3 +872,128 @@ button {
   from { transform: translateX(8px) scale(0.96); opacity: 0; }
   to   { transform: translateX(0)   scale(1);    opacity: 1; }
 }
+
+/* ============================================================
+   Smooth transitions — added in the animation-polish pass.
+   Every keyframe respects prefers-reduced-motion via the global
+   reset in tokens.css.
+   ============================================================ */
+
+/* Tab pane cross-fade — the active tab's content slides up
+   subtly when React mounts it. 180 ms is the "I saw it happen"
+   threshold without feeling laggy. */
+.content > :nth-child(2) {
+  animation: pane-enter var(--dur) var(--ease-swift);
+  animation-fill-mode: both;
+}
+@keyframes pane-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Sidebar row hover/selection — the tree row nudges right a
+   hair on hover, and the accent bar slides up from nothing
+   when it becomes selected. */
+.tree-row {
+  transition:
+    background var(--dur-fast) var(--ease-swift),
+    color var(--dur-fast) var(--ease-swift),
+    padding-left var(--dur-fast) var(--ease-spring);
+}
+.tree-row:hover {
+  padding-left: calc(var(--s-3) + 2px);
+}
+.tree-row--selected::before {
+  animation: tree-bar-slide var(--dur) var(--ease-spring);
+  transform-origin: center;
+}
+@keyframes tree-bar-slide {
+  from { transform: scaleY(0.1); opacity: 0; }
+  to   { transform: scaleY(1);   opacity: 1; }
+}
+
+/* Button press — scale down fractionally so the click feels
+   physical. Hover already lifts via --grad-* on primary. */
+.btn {
+  transition:
+    background var(--dur-fast) var(--ease-swift),
+    border-color var(--dur-fast) var(--ease-swift),
+    transform var(--dur-fast) var(--ease-spring),
+    box-shadow var(--dur-fast) var(--ease-swift);
+}
+.btn:not(.btn--primary):hover {
+  transform: translateY(-0.5px);
+}
+.btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Row hover in the data grid — accent-tinted without being loud. */
+.grid tr td {
+  transition: background var(--dur-fast) var(--ease-swift);
+}
+.grid tbody tr:not(.grid-row--selected):not(.grid-row--editing):hover td {
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-panel)) !important;
+}
+
+/* Grid fade-in on table switch. */
+.grid {
+  animation: grid-fade-in var(--dur) var(--ease-swift);
+}
+@keyframes grid-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Schema sections stagger in — gives the Schema tab a deliberate
+   "rendering" feel instead of a hard flash. */
+.schema-section {
+  animation: schema-section-in var(--dur) var(--ease-swift);
+  animation-fill-mode: both;
+}
+.schema-section:nth-child(1) { animation-delay: 0ms; }
+.schema-section:nth-child(2) { animation-delay: 40ms; }
+.schema-section:nth-child(3) { animation-delay: 80ms; }
+.schema-section:nth-child(4) { animation-delay: 120ms; }
+@keyframes schema-section-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Activity drawer — slides in from the right. */
+.activity {
+  animation: activity-slide-in var(--dur) var(--ease-swift);
+}
+@keyframes activity-slide-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+/* Command palette (history / saved queries) — springs in over a
+   fading backdrop. */
+.palette {
+  animation: palette-in var(--dur) var(--ease-spring);
+}
+.palette__backdrop {
+  animation: backdrop-fade var(--dur-fast) var(--ease-swift);
+}
+@keyframes palette-in {
+  from { transform: translateY(-12px) scale(0.96); opacity: 0; }
+  to   { transform: translateY(0)     scale(1);    opacity: 1; }
+}
+@keyframes backdrop-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content > :nth-child(2),
+  .tree-row--selected::before,
+  .grid,
+  .schema-section,
+  .activity,
+  .palette,
+  .palette__backdrop {
+    animation: none !important;
+  }
+}

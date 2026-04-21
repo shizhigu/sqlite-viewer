@@ -54,6 +54,16 @@ impl Db {
         }
         // Enforce FK constraints consistently across desktop + CLI.
         conn.pragma_update(None, "foreign_keys", "ON")?;
+        // For read-write connections, switch to WAL mode. This lets readers
+        // and writers proceed concurrently (eliminates most SQLITE_BUSY
+        // errors) and is cheap on small DBs. Read-only connections can't
+        // change journal mode, so we only do this when we own the writer.
+        if !opts.read_only {
+            // `execute_batch` instead of `pragma_update` — `journal_mode`
+            // returns the resulting mode as a row, which `pragma_update`
+            // refuses to ignore.
+            let _ = conn.execute_batch("PRAGMA journal_mode=WAL;");
+        }
 
         Ok(Self {
             conn,
