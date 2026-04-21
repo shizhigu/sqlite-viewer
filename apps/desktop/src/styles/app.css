@@ -690,6 +690,15 @@ button {
   overflow: hidden;
 }
 
+/* Editor font follows the global --font-scale so ⌘+ / ⌘- resize SQL
+ * text alongside the rest of the UI. Target .cm-content (the text
+ * layer) rather than .cm-editor so line numbers inherit the same size
+ * and the gutter stays aligned. */
+.query__editor .cm-content,
+.query__editor .cm-gutters {
+  font-size: var(--editor-font-size);
+}
+
 .query__count-ghost {
   grid-row: 4;
 }

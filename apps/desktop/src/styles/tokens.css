@@ -76,16 +76,26 @@
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
   --font-mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-base: 13px;
-  --text-lg: 15px;
-  --text-xl: 18px;
-  --lh-xs: 15px;
-  --lh-sm: 17px;
-  --lh-base: 18px;
-  --lh-lg: 20px;
-  --lh-xl: 24px;
+
+  /* Typography scale multiplier. Bumped by ⌘+ / ⌘- / ⌘0 (see
+   * `lib/zoom.ts`). We scale *only* font-size + line-height here —
+   * never the document coordinate system (no CSS `zoom`, no
+   * `transform`), because either of those breaks WebKit's
+   * `caretRangeFromPoint` and destroys click-to-position in the
+   * CodeMirror editor. Icons, borders, and spacing deliberately stay
+   * pixel-stable — text scales, the chrome doesn't bloat with it. */
+  --font-scale: 1;
+  --text-xs: calc(11px * var(--font-scale));
+  --text-sm: calc(12px * var(--font-scale));
+  --text-base: calc(13px * var(--font-scale));
+  --text-lg: calc(15px * var(--font-scale));
+  --text-xl: calc(18px * var(--font-scale));
+  --lh-xs: calc(15px * var(--font-scale));
+  --lh-sm: calc(17px * var(--font-scale));
+  --lh-base: calc(18px * var(--font-scale));
+  --lh-lg: calc(20px * var(--font-scale));
+  --lh-xl: calc(24px * var(--font-scale));
+  --editor-font-size: calc(13px * var(--font-scale));
   --s-1: 4px;
   --s-2: 8px;
   --s-3: 12px;
