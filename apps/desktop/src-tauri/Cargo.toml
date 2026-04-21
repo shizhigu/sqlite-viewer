@@ -24,5 +24,8 @@ tiny_http = "0.12"
 dirs = "5"
 getrandom = "0.2"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [features]
 custom-protocol = ["tauri/custom-protocol"]

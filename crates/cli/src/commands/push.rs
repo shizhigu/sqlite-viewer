@@ -1,6 +1,6 @@
 use std::fs;
-use std::path::Path;
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use serde::Deserialize;
 use serde_json::json;
@@ -81,9 +81,11 @@ fn send_request(
         .timeout(TIMEOUT)
         .build();
 
-    // Build the list of candidate instances — either the user-forced port
-    // (no token, best-effort) or everything registered under
-    // ~/.sqlv/instances/.
+    // Build the list of candidate instances. User-forced port skips
+    // discovery entirely (still best-effort, no token). Otherwise we
+    // enumerate `~/.sqlv/instances/`, probe each via /health, and
+    // prune anything dead from disk so the directory doesn't grow
+    // without bound between desktop restarts.
     let candidates: Vec<InstanceInfo> = match port_override {
         Some(port) => vec![InstanceInfo {
             pid: 0,
@@ -91,7 +93,7 @@ fn send_request(
             token: String::new(),
             started_at: String::new(),
         }],
-        None => list_instances(),
+        None => live_instances(),
     };
 
     if candidates.is_empty() {
@@ -104,6 +106,11 @@ fn send_request(
         ));
     }
 
+    // Since `live_instances()` already filtered to endpoints that
+    // answered `/health`, any non-2xx response here is legitimately
+    // from a sqlv backend — report it as-is. Network errors trying to
+    // reach one endpoint still fall through to the next (a race could
+    // kill the instance between probe and send).
     let mut last_err: Option<String> = None;
     for inst in candidates {
         let url = format!("http://127.0.0.1:{}{path}", inst.port);
@@ -142,9 +149,38 @@ fn send_request(
     ))
 }
 
-/// Read `~/.sqlv/instances/*.json` and return parsed entries. Missing or
-/// unreadable files are silently skipped — only parseable entries count.
-fn list_instances() -> Vec<InstanceInfo> {
+/// Return only instances that currently answer `GET /health`, sorted
+/// newest-first (by file mtime, which is set when the desktop process
+/// registered itself). Any file whose port doesn't respond is deleted
+/// as we go — that's how `~/.sqlv/instances/` stays bounded between
+/// desktop restarts even when the app is killed ungracefully.
+fn live_instances() -> Vec<InstanceInfo> {
+    let probe_agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_millis(150))
+        .timeout(Duration::from_millis(250))
+        .build();
+
+    let candidates = read_instance_dir();
+    let mut alive = Vec::with_capacity(candidates.len());
+    for (path, info) in candidates {
+        let url = format!("http://127.0.0.1:{}/health", info.port);
+        match probe_agent.get(&url).call() {
+            Ok(resp) if resp.status() == 200 => alive.push(info),
+            _ => {
+                // Dead endpoint — prune its record so subsequent pushes
+                // don't scan it again.
+                let _ = fs::remove_file(&path);
+            }
+        }
+    }
+    alive
+}
+
+/// Read `~/.sqlv/instances/*.json` and return parsed entries paired
+/// with their on-disk paths, sorted by mtime descending so the
+/// most-recently-registered instance wins the race. Missing or
+/// unreadable files are silently skipped.
+fn read_instance_dir() -> Vec<(PathBuf, InstanceInfo)> {
     let Some(home) = dirs::home_dir() else {
         return Vec::new();
     };
@@ -153,7 +189,7 @@ fn list_instances() -> Vec<InstanceInfo> {
         return Vec::new();
     };
 
-    let mut out = Vec::new();
+    let mut out: Vec<(SystemTime, PathBuf, InstanceInfo)> = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|s| s.to_str()) != Some("json") {
@@ -162,11 +198,18 @@ fn list_instances() -> Vec<InstanceInfo> {
         let Ok(body) = fs::read_to_string(&path) else {
             continue;
         };
-        if let Ok(info) = serde_json::from_str::<InstanceInfo>(&body) {
-            out.push(info);
-        }
+        let Ok(info) = serde_json::from_str::<InstanceInfo>(&body) else {
+            continue;
+        };
+        let mtime = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(SystemTime::UNIX_EPOCH);
+        out.push((mtime, path, info));
     }
-    out
+    // Newest first — Reverse gives descending mtime order.
+    out.sort_by_key(|row| std::cmp::Reverse(row.0));
+    out.into_iter().map(|(_, p, i)| (p, i)).collect()
 }
 
 fn failure_from_http(status: u16, body: &serde_json::Value) -> Failure {

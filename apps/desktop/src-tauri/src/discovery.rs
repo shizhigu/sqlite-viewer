@@ -61,6 +61,13 @@ pub fn dir() -> io::Result<PathBuf> {
 }
 
 pub fn register(port: u16) -> io::Result<Instance> {
+    // Before writing our own instance file, sweep the directory for
+    // zombie entries left by previous processes that died without
+    // running Drop (crashes, kill -9, tauri-dev HMR reloads). Without
+    // this, the directory accumulates entries forever and the CLI's
+    // `sqlv push` wastes connect-timeouts scanning dead ports.
+    gc_stale_instances();
+
     let token = generate_token()?;
     let pid = std::process::id();
     let started_at = humantime::format_rfc3339_seconds_or_now();
@@ -87,6 +94,79 @@ pub fn register(port: u16) -> io::Result<Instance> {
 
     eprintln!("[sqlv] registered instance at {}", path.display());
     Ok(Instance { path, info })
+}
+
+/// Remove any `<pid>.json` file in the instances directory whose PID is
+/// no longer a running process on this machine. Called on startup so we
+/// never grow an unbounded pile of zombies.
+///
+/// Liveness check uses `kill(pid, 0)` on Unix — cheap syscall that
+/// returns 0 for any live process and `ESRCH` for dead PIDs. PID reuse
+/// is theoretically possible (OS assigns a dead PID to some new,
+/// unrelated process) — in that case the CLI's `/health` probe catches
+/// it as a non-sqlv endpoint. Belt + braces.
+fn gc_stale_instances() {
+    let Ok(dir_path) = dir() else {
+        return;
+    };
+    let Ok(entries) = fs::read_dir(&dir_path) else {
+        return;
+    };
+    let mut removed = 0usize;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("json") {
+            continue;
+        }
+        // Parse the pid out of the filename — fall back to reading the
+        // file if the name isn't a number (older builds used differently
+        // shaped names).
+        let pid: Option<u32> = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .and_then(|s| s.parse::<u32>().ok())
+            .or_else(|| {
+                fs::read_to_string(&path)
+                    .ok()
+                    .and_then(|body| serde_json::from_str::<InstanceInfo>(&body).ok())
+                    .map(|info| info.pid)
+            });
+        let Some(pid) = pid else {
+            // Unparseable: remove it so it stops noisiying discovery.
+            let _ = fs::remove_file(&path);
+            removed += 1;
+            continue;
+        };
+        if !pid_is_alive(pid) {
+            let _ = fs::remove_file(&path);
+            removed += 1;
+        }
+    }
+    if removed > 0 {
+        eprintln!("[sqlv] cleaned {removed} stale instance file(s)");
+    }
+}
+
+#[cfg(unix)]
+fn pid_is_alive(pid: u32) -> bool {
+    // SAFETY: `kill` is safe to call with signal 0 — it performs the
+    // usual permission checks but delivers no signal. Returns 0 if the
+    // pid is a live process, -1 with errno set otherwise.
+    let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
+    if rc == 0 {
+        return true;
+    }
+    // Errno EPERM means the process exists but we can't signal it;
+    // still counts as alive. ESRCH is the "no such process" signal.
+    let errno = io::Error::last_os_error().raw_os_error().unwrap_or(0);
+    errno == libc::EPERM
+}
+
+#[cfg(not(unix))]
+fn pid_is_alive(_pid: u32) -> bool {
+    // Non-Unix: conservative default — treat as alive so we never
+    // delete a live entry. The CLI's /health probe handles pruning.
+    true
 }
 
 fn generate_token() -> io::Result<String> {
