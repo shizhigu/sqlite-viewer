@@ -69,10 +69,7 @@ pub fn list_schemas(state: State<Arc<AppState>>) -> Res<Vec<SchemaInfo>> {
 }
 
 #[tauri::command]
-pub fn list_tables_in_schema(
-    state: State<Arc<AppState>>,
-    schema: String,
-) -> Res<Vec<TableInfo>> {
+pub fn list_tables_in_schema(state: State<Arc<AppState>>, schema: String) -> Res<Vec<TableInfo>> {
     with_db(&state, |db| {
         db.tables_in_schema(&schema).map_err(AppError::from)
     })
