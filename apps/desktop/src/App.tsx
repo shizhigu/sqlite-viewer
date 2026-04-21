@@ -46,9 +46,18 @@ export default function App() {
   //   - hydratedRef stops the persistence effect from overwriting
   //     localStorage with `null` before we've had a chance to read it;
   //   - hydrationAttemptedRef guarantees the hydration effect runs only
-  //     once even across StrictMode double-mounting in dev.
+  //     once even across StrictMode double-mounting in dev;
+  //   - lastSavedRef caches what we most recently wrote to localStorage
+  //     so the subscribe below can diff without relying on Zustand's
+  //     prev-state callback shape.
   const hydratedRef = useRef(false);
   const hydrationAttemptedRef = useRef(false);
+  const lastSavedRef = useRef<{
+    dbPath: string | null;
+    readWrite: boolean;
+    activeTab: string;
+    selectedTable: string | null;
+  } | null>(null);
 
   // Restore the previous session on cold start: re-open the DB the
   // user had up, put them back on the same tab, and select the same
@@ -103,10 +112,22 @@ export default function App() {
             }
           }
         }
-      } catch {
+      } catch (e) {
+        console.warn("[sqlv:session] hydration failed:", e);
         // File moved, perms changed, schema drift — all non-fatal.
       } finally {
+        // Prime the last-saved snapshot with whatever ended up in the
+        // store, so the subscribe's diff doesn't immediately fire a
+        // redundant save on the first post-hydration change.
+        const s = useAppStore.getState();
+        lastSavedRef.current = {
+          dbPath: s.meta?.path ?? null,
+          readWrite: s.readWrite,
+          activeTab: s.activeTab,
+          selectedTable: s.selectedTable,
+        };
         hydratedRef.current = true;
+        console.debug("[sqlv:session] hydration done:", lastSavedRef.current);
       }
     })();
 
@@ -116,26 +137,32 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist the session slice on every change that matters. Gated on
-  // hydratedRef so the first wave of state settles after load don't
-  // clobber the localStorage entry before we've had a chance to read
-  // it. The subscribe callback diffs old/new so we only write when a
-  // tracked field actually changed — not on every unrelated update.
+  // Persist the session slice on every relevant change. Diffs against
+  // `lastSavedRef` (declared above) so we don't depend on Zustand's
+  // prev-state callback shape, which varies between configurations.
+  // Gated on hydratedRef so state settling DURING restoration doesn't
+  // overwrite the localStorage we just read.
   useEffect(() => {
-    const unsub = useAppStore.subscribe((state, prev) => {
+    const unsub = useAppStore.subscribe((state) => {
       if (!hydratedRef.current) return;
-      const changed =
-        state.meta?.path !== prev.meta?.path ||
-        state.readWrite !== prev.readWrite ||
-        state.activeTab !== prev.activeTab ||
-        state.selectedTable !== prev.selectedTable;
-      if (!changed) return;
-      saveSession({
+      const next = {
         dbPath: state.meta?.path ?? null,
         readWrite: state.readWrite,
         activeTab: state.activeTab,
         selectedTable: state.selectedTable,
-      });
+      };
+      const prev = lastSavedRef.current;
+      if (
+        prev &&
+        prev.dbPath === next.dbPath &&
+        prev.readWrite === next.readWrite &&
+        prev.activeTab === next.activeTab &&
+        prev.selectedTable === next.selectedTable
+      ) {
+        return;
+      }
+      lastSavedRef.current = next;
+      saveSession(next);
     });
     return unsub;
   }, []);

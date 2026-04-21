@@ -27,11 +27,16 @@ export interface PersistedSession {
 export function loadSession(): Partial<PersistedSession> | null {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
+    if (!raw) {
+      console.debug("[sqlv:session] load: no session stored");
+      return null;
+    }
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== "object") return null;
+    console.debug("[sqlv:session] load:", parsed);
     return parsed as Partial<PersistedSession>;
-  } catch {
+  } catch (e) {
+    console.warn("[sqlv:session] load failed:", e);
     return null;
   }
 }
@@ -39,8 +44,9 @@ export function loadSession(): Partial<PersistedSession> | null {
 export function saveSession(s: Partial<PersistedSession>): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(s));
-  } catch {
-    // Quota / private mode / disabled storage — not fatal.
+    console.debug("[sqlv:session] save:", s);
+  } catch (e) {
+    console.warn("[sqlv:session] save failed:", e);
   }
 }
 
