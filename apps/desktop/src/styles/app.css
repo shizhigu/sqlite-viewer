@@ -677,23 +677,17 @@ button {
   .query__pending, .query__pending-dot { animation: none; }
 }
 
-/* Minimal wrapper — just a frame in grid-row 3. No flex, no nested
- * selectors. CodeMirror sizes itself via the `height="100%"` prop and
- * owns its own scroller. */
+/* Minimal wrapper — just a frame in grid-row 3. The editor lives in
+ * its own isolated component (`SqlEditor.tsx`) which mounts CodeMirror
+ * directly into a plain <div style="height:100%">. That's the whole
+ * interop story: a sized parent, no positioning tricks, no overrides
+ * on `.cm-editor`. Anything more than this fought CodeMirror's own
+ * layout and broke pointer-to-character hit-testing. */
 .query__editor {
   grid-row: 3;
-  position: relative;
   min-height: 120px;
   border-bottom: 2px solid var(--border-strong);
   overflow: hidden;
-}
-
-/* Pin the editor to fill the frame. This is all the interop CSS
- * CodeMirror actually needs — anything else tended to fight its own
- * layout and broke pointer-to-character mapping. */
-.query__editor .cm-editor {
-  position: absolute;
-  inset: 0;
 }
 
 .query__count-ghost {

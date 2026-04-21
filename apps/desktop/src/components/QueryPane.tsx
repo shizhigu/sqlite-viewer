@@ -1,20 +1,14 @@
-import { foldKeymap } from "@codemirror/language";
-import { sql, SQLite } from "@codemirror/lang-sql";
-import { EditorView, keymap } from "@codemirror/view";
-import { githubLight, githubDark } from "@uiw/codemirror-theme-github";
-import CodeMirror from "@uiw/react-codemirror";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { append as recordHistory } from "../lib/history";
-import { cmSchemaFromMap } from "../lib/loadSchemas";
 import { save as saveQuery } from "../lib/saved";
-import { sqlFold } from "../lib/sqlFold";
 import type { AppError, QueryResult, Value } from "../lib/tauri";
 import { tauri } from "../lib/tauri";
 import { useAppStore } from "../store/app";
 
 import { HistoryPalette } from "./HistoryPalette";
 import { SavedQueriesPalette } from "./SavedQueriesPalette";
+import { SqlEditor } from "./SqlEditor";
 
 export function QueryPane() {
   const meta = useAppStore((s) => s.meta);
@@ -362,40 +356,16 @@ export function QueryPane() {
           )}
         </div>
       )}
-      <div
-        className="query__editor"
-        onKeyDown={(e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-            e.preventDefault();
-            run();
-          }
-        }}
-      >
-        <CodeMirror
+      <div className="query__editor">
+        <SqlEditor
           value={text}
-          height="100%"
-          theme={dark ? githubDark : githubLight}
-          extensions={useMemo(
-            () => [
-              sql({
-                dialect: SQLite,
-                schema: cmSchemaFromMap(schemasByName),
-                upperCaseKeywords: true,
-              }),
-              sqlFold,
-              keymap.of(foldKeymap),
-              // Wrap long lines visually instead of opening a horizontal
-              // scrollbar. The underlying text is unchanged — selection
-              // and copy-paste behave as if the line is still one line.
-              EditorView.lineWrapping,
-            ],
-            [schemasByName],
-          )}
           onChange={(v) => {
             setText(v);
             dirtyRef.current = true;
           }}
-          basicSetup={{ lineNumbers: true, foldGutter: true }}
+          onRun={run}
+          schemasByName={schemasByName}
+          dark={dark}
         />
       </div>
       {ghostCount && (
