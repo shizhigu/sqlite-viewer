@@ -1,5 +1,5 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { ActivityPanel } from "./components/ActivityPanel";
 import { BrowsePane } from "./components/BrowsePane";
@@ -11,6 +11,7 @@ import { Tabs } from "./components/Tabs";
 import { Toasts } from "./components/Toasts";
 import { Toolbar } from "./components/Toolbar";
 import { loadAllSchemas } from "./lib/loadSchemas";
+import { loadSession, saveSession } from "./lib/session";
 import { tauri } from "./lib/tauri";
 import type { DbMeta, QueryResult } from "./lib/tauri";
 import { useZoomShortcuts } from "./lib/zoom";
@@ -40,6 +41,104 @@ export default function App() {
 
   // ⌘+ / ⌘- / ⌘0 — zoom in/out/reset
   useZoomShortcuts();
+
+  // Flag + ref to gate two effects against the hydration run:
+  //   - hydratedRef stops the persistence effect from overwriting
+  //     localStorage with `null` before we've had a chance to read it;
+  //   - hydrationAttemptedRef guarantees the hydration effect runs only
+  //     once even across StrictMode double-mounting in dev.
+  const hydratedRef = useRef(false);
+  const hydrationAttemptedRef = useRef(false);
+
+  // Restore the previous session on cold start: re-open the DB the
+  // user had up, put them back on the same tab, and select the same
+  // table if it still exists. Silent on any failure — missing files,
+  // renamed tables, and parse errors all collapse to "cold start".
+  useEffect(() => {
+    if (hydrationAttemptedRef.current) return;
+    hydrationAttemptedRef.current = true;
+
+    const session = loadSession();
+    if (!session) {
+      hydratedRef.current = true;
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        if (session.activeTab) setActiveTab(session.activeTab);
+
+        if (session.dbPath) {
+          const m = await tauri.openDb(session.dbPath, !session.readWrite);
+          if (cancelled) return;
+          setMeta(m);
+          setReadWrite(!!session.readWrite);
+
+          const [t, v] = await Promise.all([
+            tauri.listTables(),
+            tauri.listViews(),
+          ]);
+          if (cancelled) return;
+          setTables(t);
+          setViews(v);
+
+          const schemas = await loadAllSchemas([
+            ...t.map((x) => x.name),
+            ...v.map((x) => x.name),
+          ]);
+          if (cancelled) return;
+          setSchemasByName(schemas);
+
+          if (
+            session.selectedTable &&
+            [...t, ...v].some((x) => x.name === session.selectedTable)
+          ) {
+            setSelectedTable(session.selectedTable);
+            try {
+              const s = await tauri.describeTable(session.selectedTable);
+              if (!cancelled) setSelectedSchema(s);
+            } catch {
+              // Renamed / dropped since last session — swallow.
+            }
+          }
+        }
+      } catch {
+        // File moved, perms changed, schema drift — all non-fatal.
+      } finally {
+        hydratedRef.current = true;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist the session slice on every change that matters. Gated on
+  // hydratedRef so the first wave of state settles after load don't
+  // clobber the localStorage entry before we've had a chance to read
+  // it. The subscribe callback diffs old/new so we only write when a
+  // tracked field actually changed — not on every unrelated update.
+  useEffect(() => {
+    const unsub = useAppStore.subscribe((state, prev) => {
+      if (!hydratedRef.current) return;
+      const changed =
+        state.meta?.path !== prev.meta?.path ||
+        state.readWrite !== prev.readWrite ||
+        state.activeTab !== prev.activeTab ||
+        state.selectedTable !== prev.selectedTable;
+      if (!changed) return;
+      saveSession({
+        dbPath: state.meta?.path ?? null,
+        readWrite: state.readWrite,
+        activeTab: state.activeTab,
+        selectedTable: state.selectedTable,
+      });
+    });
+    return unsub;
+  }, []);
 
   // Apply theme mode to the document root. `auto` removes the attribute so
   // the CSS `prefers-color-scheme` rules take over.

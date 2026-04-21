@@ -27,8 +27,14 @@
     --bg: #141418;
     --bg-panel: #1e1e24;
     --bg-row-alt: #25252c;
-    --bg-row-selected: #304a75;
-    --bg-row-editing: #47401f;
+    /* Selected row needs real luminance distance from the dark panel —
+     * the old #304a75 sat too close to #1e1e24. Mix the bright accent
+     * 45% into the panel so the band reads as "lit" against the zebra
+     * stripes at a glance. */
+    --bg-row-selected: color-mix(in srgb, var(--accent) 45%, var(--bg-panel));
+    /* Same reasoning for the editing row — old #47401f was ~invisible
+     * on dark panels; push it with the warning tone instead. */
+    --bg-row-editing: color-mix(in srgb, var(--warning) 35%, var(--bg-panel));
     --border: #4a4a54;
     --border-strong: #7a7a86;
     --text: #f5f5f8;
