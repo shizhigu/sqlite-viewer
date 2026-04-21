@@ -176,18 +176,24 @@ One Rust core, three frontends. A query run through the CLI, the desktop, or MCP
 
 ### Desktop app
 
-- Sidebar schema tree (tables / views / indexes / triggers) with filter
-- **Browse tab** — virtualized grid, inline cell edit, add / delete rows, pagination
-- **Query tab** — CodeMirror SQL editor, syntax highlighting, folding, parameterized queries, streaming results
-- **Schema tab** — structured columns / FK / indexes / CREATE-statement view
-- Light / dark / auto theme, ⌘+ ⌘− zoom, ⌘1/⌘2/⌘3 tab shortcuts
+- Sidebar schema tree with filter — **tables, views, and attached databases** (ATTACH-ed files appear as their own collapsible groups)
+- **Browse tab** — virtualized grid (1000 rows/page, `@tanstack/react-virtual`), inline cell edit, FK navigation, add / delete rows
+- **Staged changes** — flip the `Stage` toggle and all grid edits queue into a pending-changes panel with per-row revert and one-click bulk commit (single transaction, atomic rollback on failure)
+- **Query tab** — CodeMirror SQL editor with schema-aware completion, folding, parameterized queries, live "≈ N rows match" ghost annotation for simple `SELECT … WHERE …` shapes
+- **Agent preview banner** — when an agent pushes a mutating query, the SQL lands in the editor behind a *loud* warning banner with EXPLAIN QUERY PLAN + an "affects N rows in `<table>`" pill; nothing runs until the human clicks Run
+- **Cancel query** — a live Cancel button in the toolbar interrupts the running statement via `sqlite3_interrupt` (also exposed as `POST /cancel` on the local HTTP server)
+- **Schema tab** — structured columns / FK / indexes / triggers / CREATE-statement view
+- **Activity drawer** — two tabs: a live in-session feed *and* the persistent `~/.sqlv/activity.db` (shared with the CLI's `sqlv history`), with grep + per-DB filtering and one-click replay
+- Light / dark / auto theme, ⌘+ ⌘− zoom, ⌘1/⌘2/⌘3 tab shortcuts, ⌘P history, ⌘S saved queries
 - Read/write toggle with a 3-px warning strip across the window — you can't forget you're in write mode
+- Smooth Bézier-curve motion throughout (respects `prefers-reduced-motion`)
 
 ### Agent integration
 
 - `SKILL.md` with triggers, recipes, and safety rules
 - MCP stdio server for Claude Desktop / Cursor / Windsurf / Zed
-- Auth-token'd HTTP loopback for the `sqlv push` pipeline
+- Auth-token'd HTTP loopback for the `sqlv push` / `sqlv push-open` / `sqlv cancel` pipeline
+- Every query, exec, open, and cancel (from UI, CLI, or MCP) lands in `~/.sqlv/activity.db` — one shared timeline across all three surfaces
 
 ## Sample database
 
@@ -204,9 +210,8 @@ sqlv stats --db samples/ecommerce.sqlite
 
 | | |
 |---|---|
-| **Shipped in v0.1** | CLI, desktop app, SKILL.md, push/push-open, MCP server, transactional writes, streaming query mode |
-| **v0.2 (next)** | Schema-aware autocomplete, query history, FK row navigation, CSV / JSON import |
-| **v0.3** | Multi-DB tabs, saved query bookmarks, EXPLAIN QUERY PLAN viewer |
+| **Shipped** | CLI, desktop app, SKILL.md, `push` / `push-open` / `cancel`, MCP server, transactional writes, streaming query mode, schema-aware completion, query history + saved queries, FK navigation, CSV / JSON import, schema diff, persistent activity log (CLI + UI + MCP), attached DBs (`ATTACH DATABASE`), EXPLAIN QUERY PLAN preview + affected-rows estimate, virtualized grid, staged-changes panel, live row-count ghost, Bézier motion, light / dark / auto theme |
+| **Next** | Multi-DB tabs (open N files at once), schema editor GUI, CSV / JSONL export from the grid, column sort + per-column filter |
 | **On purpose, not happening** | Postgres / MySQL / remote databases (use a different tool) |
 
 See [open issues](https://github.com/shizhigu/sqlite-viewer/issues) for specifics.

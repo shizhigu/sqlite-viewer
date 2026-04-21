@@ -1,3 +1,4 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -12,14 +13,18 @@ import type { Column, ForeignKey, QueryResult, TableSchema, Value } from "../lib
 import { tauri } from "../lib/tauri";
 import { useAppStore } from "../store/app";
 
-const PAGE_SIZE = 100;
+/**
+ * Page size for data fetches. We load this many rows in one network round
+ * trip; react-virtual keeps DOM node count O(visible_rows) regardless.
+ */
+const PAGE_SIZE = 1000;
+/** Pixel height of one rendered row — keep in sync with app.css grid rules. */
+const ROW_HEIGHT = 28;
+const HEADER_HEIGHT = 36;
 
 export interface DataGridProps {
   schema: TableSchema;
-  /** Total row count, if known (from `tables` metadata). Used to render
-   * `N–M of TOTAL` and to disable `Next` on the last page. */
   totalRows: number | null;
-  /** Called when a mutation changes the server state — parent should refetch. */
   onMutated: () => void;
 }
 
@@ -29,24 +34,39 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
   const pushToast = useAppStore((s) => s.pushToast);
   const setSelectedTable = useAppStore((s) => s.setSelectedTable);
   const setSelectedSchema = useAppStore((s) => s.setSelectedSchema);
+  const setQueryRunning = useAppStore((s) => s.setQueryRunning);
+  const stagingEnabled = useAppStore((s) => s.stagingEnabled);
+  const setStagingEnabled = useAppStore((s) => s.setStagingEnabled);
+  const addStagedChange = useAppStore((s) => s.addStagedChange);
+  const stagedCount = useAppStore((s) => s.stagedChanges.length);
+
   const [page, setPage] = useState(0);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  // react-virtual scroller. The parent ref is the scrollable wrapper; the
+  // virtualizer tells us a virtual list of rows with absolute Y-offsets.
+  const parentRef = useRef<HTMLDivElement | null>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: result?.rows.length ?? 0,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 8,
+  });
 
   const pkCols = useMemo(
     () => schema.columns.filter((c) => c.pk > 0).sort((a, b) => a.pk - b.pk),
     [schema],
   );
 
-  // Map of column name → FK target (for clickable ↗ links).
   const fkByColumn = useMemo(() => {
     const m: Record<string, ForeignKey> = {};
     for (const fk of schema.foreign_keys) m[fk.from] = fk;
     return m;
   }, [schema]);
 
-  const followFk = async (fk: ForeignKey, _value: Value) => {
+  const followFk = async (fk: ForeignKey) => {
     try {
       const s = await tauri.describeTable(fk.table);
       setSelectedTable(fk.table);
@@ -61,6 +81,7 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
+      setQueryRunning(true);
       try {
         const res = await tauri.runQuery(
           `SELECT * FROM ${quote(schema.name)}`,
@@ -73,6 +94,7 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
         if (!cancelled) pushError(e as string);
       } finally {
         if (!cancelled) setLoading(false);
+        setQueryRunning(false);
       }
     };
     load();
@@ -88,6 +110,7 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
   ) => {
     if (!result) return;
     const row = result.rows[rowIdx];
+    const oldValue = row[result.columns.indexOf(col.name)];
     const allowNullOnEmpty = !col.not_null;
     let newValue: Value;
     try {
@@ -112,6 +135,20 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
       { [col.name]: newValue },
       pk,
     );
+    const pkSummary = Object.entries(pk)
+      .map(([k, v]) => `${k}=${formatValue(v)}`)
+      .join(", ");
+    if (stagingEnabled) {
+      addStagedChange({
+        table: schema.name,
+        op: "update",
+        sql,
+        params,
+        summary: `${col.name} (${pkSummary}): ${formatValue(oldValue)} → ${formatValue(newValue)}`,
+      });
+      pushToast("info", `Staged · ${col.name}`);
+      return;
+    }
     try {
       const res = await tauri.runExec(sql, params);
       if (res.rows_affected !== 1) {
@@ -125,8 +162,19 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
 
   const addEmptyRow = async () => {
     if (!readWrite) return;
+    const { sql, params } = buildInsert(schema.name, {});
+    if (stagingEnabled) {
+      addStagedChange({
+        table: schema.name,
+        op: "insert",
+        sql,
+        params,
+        summary: "default row",
+      });
+      pushToast("info", "Staged · + row");
+      return;
+    }
     try {
-      const { sql, params } = buildInsert(schema.name, {});
       await tauri.runExec(sql, params);
       pushToast("success", `Added row`);
       onMutated();
@@ -141,10 +189,8 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
       pushError("Cannot delete — this table has no primary key.");
       return;
     }
-    // Build all the DELETEs up front and submit them as one transaction.
-    // A constraint failure on row N rolls back rows 1..N-1 — no half-deleted
-    // state.
     const statements: [string, Value[]][] = [];
+    const summaries: { sql: string; params: Value[]; summary: string }[] = [];
     for (const idx of selected) {
       const row = result.rows[idx];
       const pk: Record<string, Value> = {};
@@ -154,6 +200,24 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
       }
       const { sql, params } = buildDelete(schema.name, pk);
       statements.push([sql, params]);
+      const pkSummary = Object.entries(pk)
+        .map(([k, v]) => `${k}=${formatValue(v)}`)
+        .join(", ");
+      summaries.push({ sql, params, summary: pkSummary });
+    }
+    if (stagingEnabled) {
+      for (const s of summaries) {
+        addStagedChange({
+          table: schema.name,
+          op: "delete",
+          sql: s.sql,
+          params: s.params,
+          summary: s.summary,
+        });
+      }
+      pushToast("info", `Staged · − ${statements.length} row(s)`);
+      setSelected(new Set());
+      return;
     }
     try {
       const res = await tauri.runExecMany(statements);
@@ -190,44 +254,69 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
 
   const startRow = page * PAGE_SIZE + 1;
   const endRow = page * PAGE_SIZE + result.rows.length;
-  // Prefer the known total; fall back to "≥endRow" when the row count isn't
-  // available (e.g. when browsing a view).
   const totalLabel =
     totalRows !== null ? totalRows.toLocaleString() : `≥ ${endRow}`;
   const maxPage =
-    totalRows !== null ? Math.max(0, Math.ceil(totalRows / PAGE_SIZE) - 1) : Infinity;
-  const atLastPage = totalRows !== null ? page >= maxPage : !result.truncated;
+    totalRows !== null
+      ? Math.max(0, Math.ceil(totalRows / PAGE_SIZE) - 1)
+      : Infinity;
+  const atLastPage =
+    totalRows !== null ? page >= maxPage : !result.truncated;
+
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const totalVirtual = rowVirtualizer.getTotalSize();
 
   return (
-    <div className="grid">
-      <div className="grid__scroll">
-        <table>
-          <thead>
-            <tr>
-              <th style={{ width: 30 }}>#</th>
-              {schema.columns.map((col) => (
-                <th key={col.name}>
-                  <span>
-                    {col.pk > 0 && <span className="col-badge">⚷</span>}
-                    {col.name}
-                  </span>
-                  <span className="col-type">
-                    {col.decl_type ?? ""} {col.not_null ? "· NOT NULL" : ""}
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {result.rows.map((row, rowIdx) => (
-              <tr
+    <div className="grid grid--virtual">
+      <div className="grid__scroll" ref={parentRef}>
+        <div
+          className="grid__virtual-head"
+          style={{ height: HEADER_HEIGHT }}
+          role="row"
+        >
+          <div className="grid__cell grid__cell--idx">#</div>
+          {schema.columns.map((col) => (
+            <div
+              key={col.name}
+              className="grid__cell grid__cell--head"
+              role="columnheader"
+            >
+              <span>
+                {col.pk > 0 && <span className="col-badge">⚷</span>}
+                {col.name}
+              </span>
+              <span className="col-type">
+                {col.decl_type ?? ""} {col.not_null ? "· NOT NULL" : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div
+          className="grid__virtual-body"
+          style={{ height: totalVirtual, position: "relative" }}
+        >
+          {virtualItems.map((vi) => {
+            const rowIdx = vi.index;
+            const row = result.rows[rowIdx];
+            return (
+              <div
                 key={rowIdx}
-                className={selected.has(rowIdx) ? "grid-row--selected" : ""}
-                onClick={(e) => toggleSelected(rowIdx, e.shiftKey, e.metaKey, selected, setSelected)}
+                className={`grid__row ${selected.has(rowIdx) ? "grid-row--selected" : ""}`}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  transform: `translateY(${vi.start}px)`,
+                  height: vi.size,
+                }}
+                onClick={(e) =>
+                  toggleSelected(rowIdx, e.shiftKey, e.metaKey, selected, setSelected)
+                }
               >
-                <td style={{ color: "var(--text-muted)" }}>
+                <div className="grid__cell grid__cell--idx">
                   {page * PAGE_SIZE + rowIdx + 1}
-                </td>
+                </div>
                 {schema.columns.map((col, i) => (
                   <Cell
                     key={col.name}
@@ -240,17 +329,28 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
                       isEditableValueShape(row[i])
                     }
                     fk={fkByColumn[col.name]}
-                    onFollowFk={(fk) => followFk(fk, row[i])}
+                    onFollowFk={(fk) => followFk(fk)}
                     onCommit={(raw) => commitCell(rowIdx, col, raw)}
                   />
                 ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </div>
+            );
+          })}
+        </div>
       </div>
       <div className="grid__footer">
         {selected.size > 0 && <span>{selected.size} selected</span>}
+        <label className="grid__stage-toggle" title="Queue edits and commit in one transaction">
+          <input
+            type="checkbox"
+            checked={stagingEnabled}
+            onChange={(e) => setStagingEnabled(e.target.checked)}
+          />
+          Stage
+          {stagedCount > 0 && (
+            <span className="chip staged__count-chip">{stagedCount}</span>
+          )}
+        </label>
         <span className="spacer" />
         <button
           className="btn"
@@ -361,7 +461,7 @@ function Cell({
 
   if (editing) {
     return (
-      <td>
+      <div className="grid__cell">
         <input
           ref={inputRef}
           className={`cell-input ${invalid ? "invalid" : ""}`}
@@ -390,22 +490,21 @@ function Cell({
             }
           }}
         />
-      </td>
+      </div>
     );
   }
 
   return (
-    <td
-      className={
-        [
-          editable ? "cell--editable" : "cell--locked",
-          isNull ? "cell--null" : "",
-          isBlob ? "cell--blob" : "",
-          fk ? "cell--fk" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")
-      }
+    <div
+      className={[
+        "grid__cell",
+        editable ? "cell--editable" : "cell--locked",
+        isNull ? "cell--null" : "",
+        isBlob ? "cell--blob" : "",
+        fk ? "cell--fk" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       onDoubleClick={begin}
       title={
         fk
@@ -428,7 +527,7 @@ function Cell({
         </button>
       )}
       <span className="cell-value">{formatValue(value)}</span>
-    </td>
+    </div>
   );
 }
 

@@ -29,12 +29,19 @@ fn main() {
             ping,
             open_db,
             close_db,
+            cancel_query,
             list_tables,
             list_views,
+            list_schemas,
+            list_tables_in_schema,
+            list_triggers,
             describe_table,
             run_query,
             run_exec,
             run_exec_many,
+            count_rows,
+            activity_query,
+            activity_prune,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

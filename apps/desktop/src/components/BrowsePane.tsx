@@ -4,6 +4,7 @@ import { tauri } from "../lib/tauri";
 import { useAppStore } from "../store/app";
 
 import { DataGrid } from "./DataGrid";
+import { StagedChangesPanel } from "./StagedChangesPanel";
 
 export function BrowsePane() {
   const selectedSchema = useAppStore((s) => s.selectedSchema);
@@ -34,16 +35,17 @@ export function BrowsePane() {
     );
   }
 
-  // row_count is only populated for tables, not views — `null` triggers the
-  // fallback "≥ N" label in the footer.
   const totalRows =
     tables.find((t) => t.name === selectedSchema.name)?.row_count ?? null;
 
   return (
-    <DataGrid
-      schema={selectedSchema}
-      totalRows={totalRows}
-      onMutated={refetch}
-    />
+    <div className="browse">
+      <StagedChangesPanel onCommitted={refetch} />
+      <DataGrid
+        schema={selectedSchema}
+        totalRows={totalRows}
+        onMutated={refetch}
+      />
+    </div>
   );
 }

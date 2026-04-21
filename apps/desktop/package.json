@@ -17,6 +17,7 @@
   "dependencies": {
     "@codemirror/lang-sql": "^6.9.1",
     "@tanstack/react-table": "^8.20.6",
+    "@tanstack/react-virtual": "^3.13.24",
     "@tauri-apps/api": "^2.2.0",
     "@tauri-apps/plugin-dialog": "^2.2.0",
     "@uiw/codemirror-theme-github": "^4.25.3",

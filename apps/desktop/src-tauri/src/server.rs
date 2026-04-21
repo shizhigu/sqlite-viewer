@@ -194,6 +194,15 @@ fn route(
             };
             req.respond(resp)
         }
+        (Method::Post, "/cancel") => {
+            // Fire-and-forget — cancelling a non-running connection is a no-op.
+            if let Ok(g) = state.cancel.lock() {
+                if let Some(h) = g.as_ref() {
+                    h.cancel();
+                }
+            }
+            req.respond(json_ok(&serde_json::json!({ "cancelled": true })))
+        }
         _ => req.respond(json_error(404, "not_found", "unknown route")),
     }
 }
@@ -523,6 +532,9 @@ fn handle_open(
     ) {
         Ok(db) => match db.meta() {
             Ok(meta) => {
+                if let Ok(mut cg) = state.cancel.lock() {
+                    *cg = Some(db.cancel_handle());
+                }
                 *lock_state(state) = Some(db);
                 let ev = PushedOpenEvent {
                     path: req.path.clone(),

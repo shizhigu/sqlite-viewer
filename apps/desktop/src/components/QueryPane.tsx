@@ -49,6 +49,54 @@ export function QueryPane() {
   const dark = useTheme();
 
   const pushToastAction = useAppStore((s) => s.pushToast);
+  const setQueryRunning = useAppStore((s) => s.setQueryRunning);
+
+  // Live row-count ghost — when the editor text looks like a simple
+  // SELECT … FROM t [WHERE …], we probe COUNT(*) in the background and
+  // render a subtle "≈ N rows" line. Debounced so we don't hammer the DB
+  // while the user is typing.
+  const [ghostCount, setGhostCount] = useState<{
+    table: string;
+    whereClause: string | null;
+    count: number;
+  } | null>(null);
+  useEffect(() => {
+    if (!meta) {
+      setGhostCount(null);
+      return;
+    }
+    const parsed = parseSimpleSelect(text);
+    if (!parsed) {
+      setGhostCount(null);
+      return;
+    }
+    // Only auto-probe parameterless queries — otherwise we'd need values.
+    if (/\?\d+/.test(parsed.whereClause ?? "")) {
+      setGhostCount(null);
+      return;
+    }
+    let cancelled = false;
+    const id = window.setTimeout(() => {
+      tauri
+        .countRows(parsed.table, parsed.whereClause, [])
+        .then((n) => {
+          if (!cancelled) {
+            setGhostCount({
+              table: parsed.table,
+              whereClause: parsed.whereClause,
+              count: n,
+            });
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setGhostCount(null);
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
+  }, [text, meta?.path]);
 
   const promptAndSave = () => {
     if (!meta) return;
@@ -147,6 +195,7 @@ export function QueryPane() {
   const run = async () => {
     if (!meta) return;
     setRunning(true);
+    setQueryRunning(true);
     setError(null);
     // Running commits the current editor text — subsequent pushes may
     // replace it without the "1 pending" pill unless the user edits again.
@@ -180,6 +229,7 @@ export function QueryPane() {
       recordHistory(meta?.path, { sql: text, ts: Date.now(), error: true });
     } finally {
       setRunning(false);
+      setQueryRunning(false);
     }
   };
 
@@ -344,6 +394,14 @@ export function QueryPane() {
           basicSetup={{ lineNumbers: true, foldGutter: true }}
         />
       </div>
+      {ghostCount && (
+        <div className="query__count-ghost" role="status" aria-live="polite">
+          ≈ <strong>{ghostCount.count.toLocaleString()}</strong> row
+          {ghostCount.count === 1 ? "" : "s"} match{" "}
+          {ghostCount.whereClause ? "this WHERE" : "the full table"} ·{" "}
+          <code className="mono">{ghostCount.table}</code>
+        </div>
+      )}
       {placeholderCount > 0 && (
         <div className="query__params">
           {params.map((p, i) => (
@@ -468,6 +526,66 @@ function depthOf(
     cur = p.parent;
   }
   return d;
+}
+
+/**
+ * Best-effort parser for simple `SELECT … FROM <table> [WHERE …]` shapes.
+ * Returns `null` for anything we can't safely probe with COUNT(*).
+ *
+ * Deliberately limited: no JOINs, no subqueries, no set ops. Those all
+ * either have ambiguous row counts (joins explode rows) or would require
+ * a proper AST. The ghost is an affordance, not a contract.
+ */
+function parseSimpleSelect(
+  sql: string,
+): { table: string; whereClause: string | null } | null {
+  const stripped = sql
+    .replace(/--[^\n]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .trim()
+    .replace(/;\s*$/, "");
+  if (!stripped) return null;
+  const upper = stripped.toUpperCase();
+  if (!upper.startsWith("SELECT ")) return null;
+  // Reject anything that joins or combines — ambiguous row semantics.
+  if (/\b(JOIN|UNION|INTERSECT|EXCEPT)\b/.test(upper)) return null;
+  const fromIdx = upper.indexOf(" FROM ");
+  if (fromIdx < 0) return null;
+  let rest = stripped.slice(fromIdx + 6).trim();
+  if (rest.startsWith("(")) return null; // FROM (subquery)
+  // Strip table name (possibly quoted).
+  let table = "";
+  if (rest.startsWith('"')) {
+    const end = rest.indexOf('"', 1);
+    if (end < 0) return null;
+    table = rest.slice(1, end).replace(/""/g, '"');
+    rest = rest.slice(end + 1);
+  } else {
+    const m = rest.match(/^([A-Za-z_][\w]*)/);
+    if (!m) return null;
+    table = m[1];
+    rest = rest.slice(m[1].length);
+  }
+  rest = rest.trimStart();
+  // Reject alias or schema-qualified forms.
+  if (rest.startsWith(".") || /^[A-Za-z_]/.test(rest)) return null;
+
+  const restUpper = rest.toUpperCase();
+  let whereClause: string | null = null;
+  const whereIdx = restUpper.indexOf("WHERE ");
+  if (whereIdx >= 0) {
+    whereClause = rest.slice(whereIdx + 6).trim();
+    // Strip trailing clauses that COUNT(*) doesn't care about.
+    const tail =
+      /\b(ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET|WINDOW)\b/i.exec(
+        whereClause,
+      );
+    if (tail) {
+      whereClause = whereClause.slice(0, tail.index).trim();
+    }
+    if (!whereClause) whereClause = null;
+  }
+  return { table, whereClause };
 }
 
 /**

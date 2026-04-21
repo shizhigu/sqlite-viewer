@@ -107,14 +107,54 @@ export interface AppError {
   message: string;
 }
 
+/** One attached database (from `PRAGMA database_list`). */
+export interface SchemaInfo {
+  seq: number;
+  name: string;
+  file: string;
+}
+
+export interface TriggerInfo {
+  name: string;
+  table: string;
+  sql: string | null;
+}
+
+/** One event from the persistent activity log. */
+export interface ActivityRecord {
+  id: number;
+  ts_ms: number;
+  source: string;
+  kind: string;
+  sql: string | null;
+  db_path: string | null;
+  elapsed_ms: number | null;
+  rows: number | null;
+  error_code: string | null;
+  error_message: string | null;
+}
+
+export interface ActivityQueryArgs {
+  grep?: string | null;
+  since_ms?: number | null;
+  db_path?: string | null;
+  source?: string | null;
+  limit?: number | null;
+}
+
 // -------- invoke wrappers --------
 
 export const tauri = {
   ping: () => invoke<string>("ping"),
   openDb: (path: string, readOnly: boolean) =>
     invoke<DbMeta>("open_db", { path, readOnly }),
+  cancelQuery: () => invoke<void>("cancel_query"),
   listTables: () => invoke<TableInfo[]>("list_tables"),
   listViews: () => invoke<ViewInfo[]>("list_views"),
+  listSchemas: () => invoke<SchemaInfo[]>("list_schemas"),
+  listTablesInSchema: (schema: string) =>
+    invoke<TableInfo[]>("list_tables_in_schema", { schema }),
+  listTriggers: () => invoke<TriggerInfo[]>("list_triggers"),
   describeTable: (name: string) =>
     invoke<TableSchema>("describe_table", { name }),
   runQuery: (sql: string, params: Value[], limit: number, offset: number) =>
@@ -123,5 +163,14 @@ export const tauri = {
     invoke<ExecResult>("run_exec", { sql, params }),
   runExecMany: (statements: [string, Value[]][]) =>
     invoke<ExecResult>("run_exec_many", { statements }),
+  countRows: (table: string, whereClause: string | null, params: Value[]) =>
+    invoke<number>("count_rows", { table, whereClause, params }),
+  activityQuery: (args: ActivityQueryArgs) =>
+    invoke<{ records: ActivityRecord[] }>(
+      "activity_query",
+      args as unknown as Record<string, unknown>,
+    ),
+  activityPrune: (cutoffMs: number) =>
+    invoke<number>("activity_prune", { cutoffMs }),
   closeDb: () => invoke<void>("close_db"),
 };

@@ -17,6 +17,7 @@ export function Toolbar() {
   const setSelectedSchema = useAppStore((s) => s.setSelectedSchema);
   const pushError = useAppStore((s) => s.pushError);
   const pushToast = useAppStore((s) => s.pushToast);
+  const queryRunning = useAppStore((s) => s.queryRunning);
 
   const cycleTheme = () => {
     const order: ThemeMode[] = ["auto", "light", "dark"];
@@ -78,6 +79,18 @@ export function Toolbar() {
         )}
       </div>
       <div className="toolbar__right">
+        {queryRunning && (
+          <button
+            className="btn btn--danger toolbar__cancel"
+            onClick={() => {
+              tauri.cancelQuery().catch(() => {});
+              pushToast("info", "Cancel signal sent");
+            }}
+            title="Interrupt the currently running query"
+          >
+            ■ Cancel
+          </button>
+        )}
         <button
           className="chip"
           onClick={toggleActivity}

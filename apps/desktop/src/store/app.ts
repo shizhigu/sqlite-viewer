@@ -6,6 +6,7 @@ import type {
   QueryResult,
   TableInfo,
   TableSchema,
+  Value,
   ViewInfo,
 } from "../lib/tauri";
 
@@ -33,6 +34,19 @@ export interface PushedQuery {
   plan?: { id: number; parent: number; detail: string }[];
   /** For UPDATE/DELETE pending pushes: rows the WHERE would touch. */
   affects?: { table: string; count: number };
+}
+
+/** One pending mutation accumulated while "Stage changes" is on. */
+export interface StagedChange {
+  id: number;
+  table: string;
+  op: "update" | "insert" | "delete";
+  /** Ready-to-run SQL — the Commit button just hands all of these to
+   *  `runExecMany` in insertion order, wrapped in one transaction. */
+  sql: string;
+  params: Value[];
+  /** Human-readable one-line summary for the panel. */
+  summary: string;
 }
 
 /** One entry in the agent-activity log (pushed query or pushed open). */
@@ -67,6 +81,16 @@ export interface AppStateShape {
   // External-push state
   pushedQuery: PushedQuery | null;
 
+  /** True while a query is in flight — drives the Cancel button in the
+   *  toolbar. Set by QueryPane / DataGrid around their async operations. */
+  queryRunning: boolean;
+
+  /** When enabled, grid mutations (inline edits, add-row, delete-row) are
+   *  enqueued into `stagedChanges` instead of hitting the DB immediately.
+   *  Commit all at once via the Staged Changes panel. */
+  stagingEnabled: boolean;
+  stagedChanges: StagedChange[];
+
   // Activity log (drawer)
   activity: ActivityEntry[];
   activityOpen: boolean;
@@ -85,6 +109,11 @@ export interface AppStateShape {
   setSidebarWidth: (w: number) => void;
   setTheme: (t: ThemeMode) => void;
   setPushedQuery: (q: PushedQuery) => void;
+  setQueryRunning: (running: boolean) => void;
+  setStagingEnabled: (on: boolean) => void;
+  addStagedChange: (c: Omit<StagedChange, "id">) => void;
+  removeStagedChange: (id: number) => void;
+  clearStagedChanges: () => void;
   appendActivity: (entry: Omit<ActivityEntry, "id" | "ts">) => void;
   toggleActivity: () => void;
   clearActivity: () => void;
@@ -114,12 +143,16 @@ const defaults = {
   sidebarWidth: 260,
   toasts: [] as Toast[],
   pushedQuery: null as PushedQuery | null,
+  queryRunning: false,
+  stagingEnabled: false,
+  stagedChanges: [] as StagedChange[],
   activity: [] as ActivityEntry[],
   activityOpen: false,
   schemasByName: {} as Record<string, TableSchema>,
 };
 
 let activitySeq = 1;
+let stagedSeq = 1;
 
 export const useAppStore = create<AppStateShape>((set) => ({
   ...defaults,
@@ -138,6 +171,17 @@ export const useAppStore = create<AppStateShape>((set) => ({
     set({ theme });
   },
   setPushedQuery: (pushedQuery) => set({ pushedQuery }),
+  setQueryRunning: (queryRunning) => set({ queryRunning }),
+  setStagingEnabled: (stagingEnabled) => set({ stagingEnabled }),
+  addStagedChange: (c) =>
+    set((s) => ({
+      stagedChanges: [...s.stagedChanges, { ...c, id: stagedSeq++ }],
+    })),
+  removeStagedChange: (id) =>
+    set((s) => ({
+      stagedChanges: s.stagedChanges.filter((c) => c.id !== id),
+    })),
+  clearStagedChanges: () => set({ stagedChanges: [] }),
   appendActivity: (entry) =>
     set((s) => ({
       activity: [
