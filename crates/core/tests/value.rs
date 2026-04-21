@@ -1,4 +1,4 @@
-use sqlv_core::Value;
+use sqlv_core::{Value, BLOB_PREVIEW_BYTES, JSON_SAFE_INTEGER_MAX};
 
 #[test]
 fn null_serializes_to_json_null() {
@@ -6,19 +6,61 @@ fn null_serializes_to_json_null() {
 }
 
 #[test]
-fn integer_serializes_as_number() {
+fn integer_within_js_safe_range_serializes_as_number() {
     assert_eq!(serde_json::to_string(&Value::Integer(42)).unwrap(), "42");
     assert_eq!(serde_json::to_string(&Value::Integer(-1)).unwrap(), "-1");
     assert_eq!(
-        serde_json::to_string(&Value::Integer(i64::MAX)).unwrap(),
-        i64::MAX.to_string()
+        serde_json::to_string(&Value::Integer(JSON_SAFE_INTEGER_MAX)).unwrap(),
+        JSON_SAFE_INTEGER_MAX.to_string(),
+    );
+    assert_eq!(
+        serde_json::to_string(&Value::Integer(-JSON_SAFE_INTEGER_MAX)).unwrap(),
+        (-JSON_SAFE_INTEGER_MAX).to_string(),
     );
 }
 
 #[test]
-fn real_serializes_as_number() {
+fn integer_above_js_safe_range_serializes_as_tagged_string() {
+    // 2^53 + 1 — the canonical number that JS loses precision on.
+    let v = Value::Integer(JSON_SAFE_INTEGER_MAX + 2);
+    let s = serde_json::to_string(&v).unwrap();
+    assert_eq!(
+        s,
+        format!("{{\"$int64\":\"{}\"}}", JSON_SAFE_INTEGER_MAX + 2),
+    );
+}
+
+#[test]
+fn integer_i64_extremes_serialize_as_tagged_string() {
+    let max = serde_json::to_string(&Value::Integer(i64::MAX)).unwrap();
+    let min = serde_json::to_string(&Value::Integer(i64::MIN)).unwrap();
+    assert!(max.contains("$int64"), "got {max}");
+    assert!(min.contains("$int64"), "got {min}");
+    // Parse back and verify no digits were lost.
+    let parsed: serde_json::Value = serde_json::from_str(&max).unwrap();
+    assert_eq!(parsed["$int64"], i64::MAX.to_string());
+}
+
+#[test]
+fn real_finite_serializes_as_number() {
     let v = Value::Real(3.5);
     assert_eq!(serde_json::to_string(&v).unwrap(), "3.5");
+}
+
+#[test]
+fn real_non_finite_serializes_as_tagged_label() {
+    assert_eq!(
+        serde_json::to_string(&Value::Real(f64::NAN)).unwrap(),
+        "{\"$real\":\"NaN\"}",
+    );
+    assert_eq!(
+        serde_json::to_string(&Value::Real(f64::INFINITY)).unwrap(),
+        "{\"$real\":\"Infinity\"}",
+    );
+    assert_eq!(
+        serde_json::to_string(&Value::Real(f64::NEG_INFINITY)).unwrap(),
+        "{\"$real\":\"-Infinity\"}",
+    );
 }
 
 #[test]
@@ -35,6 +77,34 @@ fn blob_serializes_as_tagged_object() {
         serde_json::to_string(&v).unwrap(),
         "{\"$blob_base64\":\"3q2+7w==\"}"
     );
+}
+
+#[test]
+fn blob_above_threshold_serializes_as_truncated_with_size() {
+    // Threshold + 1 byte triggers the truncated shape.
+    let big = vec![0xabu8; BLOB_PREVIEW_BYTES + 1];
+    let s = serde_json::to_string(&Value::Blob(big.clone())).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&s).unwrap();
+    assert!(v.get("$blob_base64_truncated").is_some());
+    assert_eq!(v["$blob_size"], big.len());
+    assert!(
+        v.get("$blob_base64").is_none(),
+        "shouldn't also emit full form"
+    );
+    // Ensure the preview is exactly the threshold, not the whole thing.
+    let preview = v["$blob_base64_truncated"].as_str().unwrap();
+    let decoded_len = preview.trim_end_matches('=').len() * 3 / 4;
+    assert_eq!(decoded_len, BLOB_PREVIEW_BYTES);
+}
+
+#[test]
+fn blob_at_exactly_threshold_still_uses_full_form() {
+    // Boundary: exactly THRESHOLD bytes should still be emitted whole.
+    let exact = vec![0x42u8; BLOB_PREVIEW_BYTES];
+    let s = serde_json::to_string(&Value::Blob(exact)).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&s).unwrap();
+    assert!(v.get("$blob_base64").is_some());
+    assert!(v.get("$blob_base64_truncated").is_none());
 }
 
 #[test]

@@ -34,6 +34,13 @@ pub struct Column {
     pub default_value: Option<String>,
     /// 0 if not part of the primary key, otherwise the 1-based position.
     pub pk: i32,
+    /// `PRAGMA table_xinfo` 6th column.
+    ///   0 = normal column
+    ///   1 = hidden column in a virtual table (e.g. FTS5 aux columns)
+    ///   2 = VIRTUAL generated column (computed at query time)
+    ///   3 = STORED generated column (computed at insert/update time)
+    /// Frontends must refuse inline edits on anything where `hidden != 0`.
+    pub hidden: i32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -186,7 +193,11 @@ impl Db {
     }
 
     fn table_info(&self, table: &str) -> Result<Vec<Column>> {
-        let sql = format!("PRAGMA table_info({})", quote_ident(table));
+        // `table_xinfo` is `table_info` + a `hidden` column (since 3.26).
+        // Using `xinfo` means generated columns (VIRTUAL/STORED) and virtual-
+        // table shadow columns are surfaced — without it a GUI would let you
+        // "edit" a computed column and get a SQLite error on save.
+        let sql = format!("PRAGMA table_xinfo({})", quote_ident(table));
         let mut stmt = self.conn().prepare(&sql)?;
         let rows = stmt.query_map([], |r| {
             Ok(Column {
@@ -196,6 +207,7 @@ impl Db {
                 not_null: r.get::<_, i32>(3)? != 0,
                 default_value: r.get::<_, Option<String>>(4)?,
                 pk: r.get(5)?,
+                hidden: r.get::<_, i32>(6).unwrap_or(0),
             })
         })?;
         Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)

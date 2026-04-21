@@ -39,6 +39,10 @@ export interface Column {
   not_null: boolean;
   default_value: string | null;
   pk: number;
+  /** `PRAGMA table_xinfo` hidden flag. 0=normal, 1=virtual-table hidden,
+   *  2=VIRTUAL generated, 3=STORED generated. Inline edit is only valid
+   *  when this is 0. */
+  hidden: number;
 }
 
 export interface ForeignKey {
@@ -70,11 +74,19 @@ export interface TableSchema {
   sql: string | null;
 }
 
+/**
+ * Cell value mirrored from `sqlv-core::Value`. Tagged variants exist for
+ * values JSON can't represent losslessly (i64 > 2^53, non-finite f64,
+ * large blobs). See `crates/core/src/value.rs`.
+ */
 export type Value =
   | null
   | number
   | string
-  | { $blob_base64: string };
+  | { $blob_base64: string }
+  | { $blob_base64_truncated: string; $blob_size: number }
+  | { $int64: string }
+  | { $real: "NaN" | "Infinity" | "-Infinity" };
 
 export interface QueryResult {
   columns: string[];

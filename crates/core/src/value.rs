@@ -3,13 +3,22 @@ use serde::ser::{Serialize, SerializeMap, Serializer};
 
 /// A SQLite cell value, preserving the four storage classes plus NULL.
 ///
-/// JSON serialization:
+/// JSON serialization is lossy-safe: when a value doesn't fit in JSON's
+/// native types, we tag it so the consumer (CLI / frontend / MCP host) can
+/// recover the exact SQLite value instead of silently losing precision.
+///
 /// - `Null` → `null`
-/// - `Integer` → JSON number
-/// - `Real` → JSON number
+/// - `Integer` → JSON number when it fits in JS's safe-integer range
+///   (±2⁵³-1); otherwise `{"$int64": "9007199254740993"}`. JavaScript's
+///   `number` is a float64 — larger integers lose precision silently.
+/// - `Real` → JSON number when finite; otherwise
+///   `{"$real": "NaN" | "Infinity" | "-Infinity"}`. `serde_json` rejects
+///   non-finite floats; we turn them into a stable tagged form instead.
 /// - `Text` → JSON string
-/// - `Blob` → `{"$blob_base64": "..."}` — object tag so downstream code can
-///   distinguish strings from blobs without guessing.
+/// - `Blob` ≤ 16 KiB → `{"$blob_base64": "..."}`
+/// - `Blob` > 16 KiB → `{"$blob_base64_truncated": "<first 16 KiB>",
+///    "$blob_size": <total_bytes>}`. Full-blob access is a separate
+///   endpoint (agents/consumers that need the whole blob can re-query).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Null,
@@ -18,6 +27,11 @@ pub enum Value {
     Text(String),
     Blob(Vec<u8>),
 }
+
+/// Largest integer that JS / JSON can represent exactly (2⁵³ - 1).
+pub const JSON_SAFE_INTEGER_MAX: i64 = 9_007_199_254_740_991;
+/// Max blob size we'll fully embed inline in a JSON response.
+pub const BLOB_PREVIEW_BYTES: usize = 16 * 1024;
 
 impl Value {
     pub fn from_json(v: &serde_json::Value) -> Self {
@@ -45,13 +59,48 @@ impl Serialize for Value {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         match self {
             Value::Null => s.serialize_unit(),
-            Value::Integer(i) => s.serialize_i64(*i),
-            Value::Real(f) => s.serialize_f64(*f),
+            Value::Integer(i) => {
+                if (-JSON_SAFE_INTEGER_MAX..=JSON_SAFE_INTEGER_MAX).contains(i) {
+                    s.serialize_i64(*i)
+                } else {
+                    // Tag as a decimal string so JS / Python consumers that
+                    // parse the response can losslessly reconstruct the i64.
+                    let mut m = s.serialize_map(Some(1))?;
+                    m.serialize_entry("$int64", &i.to_string())?;
+                    m.end()
+                }
+            }
+            Value::Real(f) => {
+                if f.is_finite() {
+                    s.serialize_f64(*f)
+                } else {
+                    let label = if f.is_nan() {
+                        "NaN"
+                    } else if f.is_sign_negative() {
+                        "-Infinity"
+                    } else {
+                        "Infinity"
+                    };
+                    let mut m = s.serialize_map(Some(1))?;
+                    m.serialize_entry("$real", label)?;
+                    m.end()
+                }
+            }
             Value::Text(t) => s.serialize_str(t),
             Value::Blob(b) => {
-                let mut m = s.serialize_map(Some(1))?;
-                m.serialize_entry("$blob_base64", &b64_encode(b))?;
-                m.end()
+                if b.len() <= BLOB_PREVIEW_BYTES {
+                    let mut m = s.serialize_map(Some(1))?;
+                    m.serialize_entry("$blob_base64", &b64_encode(b))?;
+                    m.end()
+                } else {
+                    let mut m = s.serialize_map(Some(2))?;
+                    m.serialize_entry(
+                        "$blob_base64_truncated",
+                        &b64_encode(&b[..BLOB_PREVIEW_BYTES]),
+                    )?;
+                    m.serialize_entry("$blob_size", &b.len())?;
+                    m.end()
+                }
             }
         }
     }

@@ -118,15 +118,45 @@ export function coerceFromString(
 /** Render a `Value` into its cell display string. */
 export function formatValue(v: Value): string {
   if (v === null) return "NULL";
-  if (typeof v === "object" && v && "$blob_base64" in v) {
-    const len = estimateBlobBytes((v as { $blob_base64: string }).$blob_base64);
-    return `<blob · ${len}b>`;
+  if (typeof v === "object" && v !== null) {
+    if ("$blob_base64" in v) {
+      const len = estimateBlobBytes(v.$blob_base64);
+      return `<blob · ${formatBytes(len)}>`;
+    }
+    if ("$blob_base64_truncated" in v) {
+      return `<blob · ${formatBytes(v.$blob_size)} · preview>`;
+    }
+    if ("$int64" in v) {
+      // Preserve the full decimal string; JS `number` can't hold it exactly.
+      return v.$int64;
+    }
+    if ("$real" in v) {
+      return v.$real;
+    }
   }
   return String(v);
+}
+
+/** Tagged values (i64 / NaN / large blob) and NULL are never editable;
+ *  plain numbers, strings, and small blobs are. */
+export function isEditableValueShape(v: Value): boolean {
+  if (v === null) return true; // editing NULL is fine — user types replacement.
+  if (typeof v === "object" && v !== null) {
+    // Only plain small blobs were ever editable, and we block blobs anyway.
+    return false;
+  }
+  return true;
 }
 
 function estimateBlobBytes(b64: string): number {
   // Three bytes per 4 base64 chars, minus padding.
   const padding = (b64.match(/=+$/)?.[0] ?? "").length;
   return Math.max(0, Math.floor((b64.length * 3) / 4) - padding);
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }

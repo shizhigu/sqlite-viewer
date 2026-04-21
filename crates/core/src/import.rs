@@ -21,6 +21,14 @@ pub struct ImportResult {
 pub struct CsvImportOpts {
     pub has_header: bool,
     pub delimiter: u8,
+    /// When set, any field whose raw string equals this exact value is
+    /// inserted as `NULL` instead of as `TEXT`. CSV has no native NULL
+    /// representation, so this is a policy choice the caller must make
+    /// explicit. Common settings:
+    ///   - `Some("")`      — unquoted empty fields become NULL.
+    ///   - `Some("NULL")`  — the literal string `NULL` becomes NULL.
+    ///   - `None`          — every field is TEXT (status quo).
+    pub null_token: Option<String>,
 }
 
 impl Default for CsvImportOpts {
@@ -28,6 +36,7 @@ impl Default for CsvImportOpts {
         Self {
             has_header: true,
             delimiter: b',',
+            null_token: None,
         }
     }
 }
@@ -117,7 +126,13 @@ impl Db {
                     columns.join(", ")
                 )));
             }
-            let params: Vec<Value> = rec.iter().map(|s| Value::Text(s.to_string())).collect();
+            let params: Vec<Value> = rec
+                .iter()
+                .map(|s| match &opts.null_token {
+                    Some(tok) if s == tok.as_str() => Value::Null,
+                    _ => Value::Text(s.to_string()),
+                })
+                .collect();
             match stmt.execute(rusqlite::params_from_iter(params.iter())) {
                 Ok(_) => count += 1,
                 Err(e) => {

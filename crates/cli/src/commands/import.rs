@@ -20,6 +20,7 @@ pub fn run(args: ImportArgs, force_json: bool) -> Result<(), Failure> {
     let opts = CsvImportOpts {
         has_header: !args.no_header,
         delimiter: delim_bytes[0],
+        null_token: args.null_token,
     };
 
     let db = Db::open(

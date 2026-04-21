@@ -6,6 +6,7 @@ import {
   buildUpdate,
   coerceFromString,
   formatValue,
+  isEditableValueShape,
 } from "../lib/sql";
 import type { Column, ForeignKey, QueryResult, TableSchema, Value } from "../lib/tauri";
 import { tauri } from "../lib/tauri";
@@ -232,7 +233,12 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
                     key={col.name}
                     value={row[i]}
                     column={col}
-                    editable={readWrite && col.pk === 0}
+                    editable={
+                      readWrite &&
+                      col.pk === 0 &&
+                      col.hidden === 0 &&
+                      isEditableValueShape(row[i])
+                    }
                     fk={fkByColumn[col.name]}
                     onFollowFk={(fk) => followFk(fk, row[i])}
                     onCommit={(raw) => commitCell(rowIdx, col, raw)}

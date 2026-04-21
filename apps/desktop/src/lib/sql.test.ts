@@ -180,13 +180,31 @@ describe("formatValue", () => {
     expect(formatValue("hi")).toBe("hi");
   });
 
-  it("renders blob with approximate byte count", () => {
+  it("renders blob with pretty byte count", () => {
     // 4 bytes base64 → "AQIDBA==" (padding "==") = 4 bytes
     const blob = { $blob_base64: "AQIDBA==" };
-    expect(formatValue(blob)).toBe("<blob · 4b>");
+    expect(formatValue(blob)).toBe("<blob · 4 B>");
   });
 
   it("renders zero-byte blob", () => {
-    expect(formatValue({ $blob_base64: "" })).toBe("<blob · 0b>");
+    expect(formatValue({ $blob_base64: "" })).toBe("<blob · 0 B>");
+  });
+
+  it("renders truncated blob with size", () => {
+    expect(
+      formatValue({ $blob_base64_truncated: "xxx", $blob_size: 2_048_000 }),
+    ).toBe("<blob · 2.0 MB · preview>");
+  });
+
+  it("renders $int64 tagged integer exactly", () => {
+    expect(formatValue({ $int64: "9007199254740993" })).toBe(
+      "9007199254740993",
+    );
+  });
+
+  it("renders $real non-finite as its label", () => {
+    expect(formatValue({ $real: "NaN" })).toBe("NaN");
+    expect(formatValue({ $real: "Infinity" })).toBe("Infinity");
+    expect(formatValue({ $real: "-Infinity" })).toBe("-Infinity");
   });
 });

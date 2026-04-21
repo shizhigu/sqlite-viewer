@@ -176,6 +176,11 @@ pub struct ImportArgs {
     /// Field delimiter (one byte). Default is `,`.
     #[arg(long, default_value = ",")]
     pub delimiter: String,
+    /// When set, any CSV field whose raw string equals this exact value is
+    /// inserted as NULL. Use `--null-token ""` to treat unquoted empty
+    /// fields as NULL, or `--null-token NULL` for the literal string.
+    #[arg(long, value_name = "STRING")]
+    pub null_token: Option<String>,
     /// Required to open the database read-write.
     #[arg(long)]
     pub write: bool,

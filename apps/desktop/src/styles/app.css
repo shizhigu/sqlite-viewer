@@ -63,9 +63,19 @@ button {
   left: 0;
   right: 0;
   height: 3px;
-  background: var(--warning);
+  background: var(--grad-warning);
   z-index: 100;
   pointer-events: none;
+  animation: rw-bar-pulse 2.8s var(--ease-soft) infinite;
+}
+
+@keyframes rw-bar-pulse {
+  0%, 100% { opacity: 0.9; }
+  50%      { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app[data-mode="rw"]::before { animation: none; }
 }
 
 .app__middle {
@@ -121,14 +131,30 @@ button {
 }
 
 .btn--primary {
-  background: var(--accent);
+  background: var(--grad-accent);
   color: var(--text-inverse);
-  border-color: var(--accent);
-  font-weight: 500;
+  border-color: transparent;
+  font-weight: 600;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--text-inverse) 30%, transparent) inset,
+    0 4px 10px -4px color-mix(in srgb, var(--accent) 50%, transparent);
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    box-shadow var(--dur) var(--ease-swift),
+    filter var(--dur-fast) var(--ease-swift);
 }
 
 .btn--primary:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.08);
+  transform: translateY(-0.5px);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--text-inverse) 40%, transparent) inset,
+    var(--shadow-accent);
+}
+
+.btn--primary:active {
+  transform: translateY(0);
+  filter: brightness(0.96);
 }
 
 /* Filled red — destructive actions should be unambiguous when active. */
@@ -181,12 +207,21 @@ button {
 }
 
 .chip--mode-rw {
-  background: var(--warning);
+  background: var(--grad-warning);
   color: var(--text-inverse);
-  border-color: var(--warning);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 35%, transparent);
+  border-color: transparent;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--warning) 35%, transparent),
+    0 6px 16px -6px color-mix(in srgb, var(--warning) 50%, transparent);
+  transition: box-shadow var(--dur) var(--ease-spring);
+}
+
+.chip--mode-rw:hover {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--warning) 40%, transparent),
+    0 8px 22px -6px color-mix(in srgb, var(--warning) 60%, transparent);
 }
 
 /* ---- Sidebar / SchemaTree ---- */
@@ -338,7 +373,26 @@ button {
 .tab--active {
   color: var(--text);
   font-weight: 600;
-  border-bottom-color: var(--accent);
+  position: relative;
+  border-bottom-color: transparent;
+}
+
+/* Gradient underline with a Bézier ease-in — more refined than a flat bar. */
+.tab--active::after {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: -2px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--grad-accent);
+  animation: tab-slide-in var(--dur) var(--ease-swift);
+}
+
+@keyframes tab-slide-in {
+  from { transform: scaleX(0.4); opacity: 0; }
+  to   { transform: scaleX(1);   opacity: 1; }
 }
 
 .tab-panel {
@@ -649,6 +703,8 @@ button {
 /* ---- Empty + toast ---- */
 
 .empty-state {
+  position: relative;
+  overflow: hidden;
   display: grid;
   place-items: center;
   height: 100%;
@@ -656,6 +712,37 @@ button {
   font-size: var(--text-base);
   padding: var(--s-7);
   text-align: center;
+}
+
+/* A soft Bézier-curve accent behind the empty state. Single inline SVG to
+   avoid a network request; uses the same 3-stop wordmark gradient as the
+   logo so the app feels cohesive. Animation is a slow drift so it looks
+   alive without ever drawing attention. */
+.empty-state::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 400' preserveAspectRatio='none'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%233d8eff' stop-opacity='0.18'/><stop offset='0.5' stop-color='%237a6bff' stop-opacity='0.18'/><stop offset='1' stop-color='%23ff5e85' stop-opacity='0.18'/></linearGradient></defs><path d='M 0 260 C 200 180 300 320 450 240 S 700 180 820 260' stroke='url(%23g)' stroke-width='2' fill='none' stroke-linecap='round'/><path d='M 0 290 C 240 200 320 350 470 260 S 720 200 820 290' stroke='url(%23g)' stroke-width='1.5' fill='none' stroke-linecap='round' opacity='0.6'/></svg>");
+  background-repeat: no-repeat;
+  background-size: 120% 70%;
+  background-position: center 55%;
+  opacity: 0.9;
+  animation: empty-drift 14s var(--ease-soft) infinite alternate;
+}
+
+.empty-state > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes empty-drift {
+  from { background-position: 48% 55%; }
+  to   { background-position: 52% 52%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .empty-state::before { animation: none; }
 }
 
 .toasts {
@@ -680,6 +767,7 @@ button {
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text);
+  animation: toast-in var(--dur) var(--ease-spring);
 }
 
 /* Loud error — filled red. The whole point is that you cannot miss it. */
@@ -694,4 +782,9 @@ button {
   background: var(--success);
   border-color: var(--success);
   color: var(--text-inverse);
+}
+
+@keyframes toast-in {
+  from { transform: translateX(8px) scale(0.96); opacity: 0; }
+  to   { transform: translateX(0)   scale(1);    opacity: 1; }
 }
