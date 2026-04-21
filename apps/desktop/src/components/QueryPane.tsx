@@ -1,6 +1,6 @@
 import { foldKeymap } from "@codemirror/language";
 import { sql, SQLite } from "@codemirror/lang-sql";
-import { keymap } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
 import { githubLight, githubDark } from "@uiw/codemirror-theme-github";
 import CodeMirror from "@uiw/react-codemirror";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -384,6 +384,10 @@ export function QueryPane() {
               }),
               sqlFold,
               keymap.of(foldKeymap),
+              // Wrap long lines visually instead of opening a horizontal
+              // scrollbar. The underlying text is unchanged — selection
+              // and copy-paste behave as if the line is still one line.
+              EditorView.lineWrapping,
             ],
             [schemasByName],
           )}
