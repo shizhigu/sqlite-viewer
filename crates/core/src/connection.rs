@@ -30,6 +30,35 @@ pub struct Db {
     read_only: bool,
 }
 
+impl Db {
+    /// Hand back a cancellation handle tied to this connection. Calling
+    /// [`CancelHandle::cancel`] from another thread makes the currently
+    /// running query return `Error::Sqlite(SqliteFailure(… INTERRUPT …))`.
+    ///
+    /// The handle can be cloned and stored in app state; interrupting a
+    /// non-running connection is a no-op so cross-thread races are safe.
+    pub fn cancel_handle(&self) -> CancelHandle {
+        CancelHandle {
+            inner: std::sync::Arc::new(self.conn.get_interrupt_handle()),
+        }
+    }
+}
+
+/// Thread-safe cancellation handle for a running query on a [`Db`].
+#[derive(Clone)]
+pub struct CancelHandle {
+    inner: std::sync::Arc<rusqlite::InterruptHandle>,
+}
+
+impl CancelHandle {
+    /// Signal the underlying SQLite engine to abort the in-flight statement.
+    /// Returns once the interrupt has been delivered — the running call on
+    /// the other thread will unwind with `Error::Sqlite` shortly after.
+    pub fn cancel(&self) {
+        self.inner.interrupt();
+    }
+}
+
 impl std::fmt::Debug for Db {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Db")

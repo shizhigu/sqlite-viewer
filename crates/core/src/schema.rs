@@ -11,6 +11,17 @@ pub enum TableKind {
     View,
 }
 
+/// One attached database schema. `PRAGMA database_list` returns one row
+/// per attached file (always includes `main` and the implicit `temp`).
+#[derive(Debug, Clone, Serialize)]
+pub struct SchemaInfo {
+    /// 0 = `main`, 1 = `temp`, 2+ = user-attached.
+    pub seq: i32,
+    pub name: String,
+    /// The backing file path. Empty for `:memory:` / `temp`.
+    pub file: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct TableInfo {
     pub name: String,
@@ -86,6 +97,51 @@ pub struct TableSchema {
 }
 
 impl Db {
+    /// Enumerate all databases visible to this connection — `main`,
+    /// `temp`, plus anything the user has `ATTACH`ed.
+    pub fn schemas(&self) -> Result<Vec<SchemaInfo>> {
+        let mut stmt = self.conn().prepare("PRAGMA database_list")?;
+        let rows = stmt.query_map([], |r| {
+            Ok(SchemaInfo {
+                seq: r.get(0)?,
+                name: r.get(1)?,
+                file: r.get(2)?,
+            })
+        })?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
+    /// Like [`Self::tables`] but scoped to a specific attached schema
+    /// (`main`, `temp`, or a user-given alias). Pass `"main"` to reproduce
+    /// the default [`Self::tables`] behavior.
+    pub fn tables_in_schema(&self, schema: &str) -> Result<Vec<TableInfo>> {
+        // `quote_ident` is the right tool even for schema names —
+        // `PRAGMA table_list` accepts them unquoted, but `sqlite_master`
+        // needs the qualifier properly formed to dodge reserved words.
+        let qs = quote_ident(schema);
+        let sql = format!(
+            "SELECT name, sql FROM {qs}.sqlite_master \
+             WHERE type='table' AND name NOT LIKE 'sqlite_%' \
+             ORDER BY name"
+        );
+        let mut stmt = self.conn().prepare(&sql)?;
+        let rows = stmt.query_map([], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (name, sql) = row?;
+            let row_count = self.table_row_count_in(schema, &name).ok();
+            out.push(TableInfo {
+                name,
+                kind: TableKind::Table,
+                row_count,
+                sql,
+            });
+        }
+        Ok(out)
+    }
+
     pub fn tables(&self) -> Result<Vec<TableInfo>> {
         let mut stmt = self.conn().prepare(
             "SELECT name, sql FROM sqlite_master \
@@ -213,6 +269,16 @@ impl Db {
 
     fn table_row_count(&self, table: &str) -> Result<u64> {
         let sql = format!("SELECT COUNT(*) FROM {}", quote_ident(table));
+        let count: i64 = self.conn().query_row(&sql, [], |r| r.get(0))?;
+        Ok(count.max(0) as u64)
+    }
+
+    fn table_row_count_in(&self, schema: &str, table: &str) -> Result<u64> {
+        let sql = format!(
+            "SELECT COUNT(*) FROM {}.{}",
+            quote_ident(schema),
+            quote_ident(table)
+        );
         let count: i64 = self.conn().query_row(&sql, [], |r| r.get(0))?;
         Ok(count.max(0) as u64)
     }

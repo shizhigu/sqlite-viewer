@@ -17,7 +17,7 @@ mod stats;
 mod value;
 
 pub use classify::{classify as classify_sql, SqlKind};
-pub use connection::{Db, OpenOpts};
+pub use connection::{CancelHandle, Db, OpenOpts};
 pub use dump::DumpFilter;
 pub use error::{Error, Result};
 pub use import::{guess_json_format, CsvImportOpts, ImportResult, JsonFormat};
@@ -26,7 +26,8 @@ pub use meta::DbMeta;
 pub use pragma::PragmaValue;
 pub use query::{ExecResult, Page, QueryResult};
 pub use schema::{
-    Column, ForeignKey, IndexInfo, TableInfo, TableKind, TableSchema, TriggerInfo, ViewInfo,
+    Column, ForeignKey, IndexInfo, SchemaInfo, TableInfo, TableKind, TableSchema, TriggerInfo,
+    ViewInfo,
 };
 pub use stats::{DbStats, TableStat};
 pub use value::{Value, BLOB_PREVIEW_BYTES, JSON_SAFE_INTEGER_MAX};
