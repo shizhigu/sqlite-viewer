@@ -25,7 +25,11 @@ fn dump_schema_only_has_no_inserts() {
     let fixture = common::make_catalogue();
     let db = Db::open(fixture.path(), OpenOpts::default()).unwrap();
     let sql = db
-        .dump(DumpFilter { schema: true, data: false, only_tables: None })
+        .dump(DumpFilter {
+            schema: true,
+            data: false,
+            only_tables: None,
+        })
         .unwrap();
     assert!(sql.contains("CREATE TABLE"));
     assert!(!sql.contains("INSERT INTO"));
@@ -36,7 +40,11 @@ fn dump_data_only_has_no_creates() {
     let fixture = common::make_catalogue();
     let db = Db::open(fixture.path(), OpenOpts::default()).unwrap();
     let sql = db
-        .dump(DumpFilter { schema: false, data: true, only_tables: None })
+        .dump(DumpFilter {
+            schema: false,
+            data: true,
+            only_tables: None,
+        })
         .unwrap();
     assert!(!sql.contains("CREATE TABLE"));
     assert!(sql.contains("INSERT INTO"));
@@ -48,7 +56,11 @@ fn dump_filter_restricts_to_named_tables() {
     let db = Db::open(fixture.path(), OpenOpts::default()).unwrap();
     let only = vec!["artists".to_string()];
     let sql = db
-        .dump(DumpFilter { schema: true, data: true, only_tables: Some(&only) })
+        .dump(DumpFilter {
+            schema: true,
+            data: true,
+            only_tables: Some(&only),
+        })
         .unwrap();
     assert!(sql.contains("CREATE TABLE artists"));
     assert!(!sql.contains("CREATE TABLE albums"));
@@ -59,7 +71,14 @@ fn dump_filter_restricts_to_named_tables() {
 #[test]
 fn dump_handles_null_integer_text_real_blob_literals() {
     let file = common::make_empty();
-    let db = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     db.exec(
         "CREATE TABLE mixed (a INTEGER, b REAL, c TEXT, d BLOB);",
         &[],
@@ -93,8 +112,14 @@ fn dump_output_is_replayable_into_fresh_database() {
     let sql = src.dump(DumpFilter::default()).unwrap();
 
     let dest_file = common::make_empty();
-    let dest =
-        Db::open(dest_file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let dest = Db::open(
+        dest_file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     // execute_batch to replay the whole dump. This is the real compatibility
     // test: the dump must be re-ingestible.
     rusqlite_exec_batch(&dest, &sql);

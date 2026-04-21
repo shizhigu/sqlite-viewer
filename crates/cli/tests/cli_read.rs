@@ -76,7 +76,9 @@ fn indexes_all_tables() {
 #[test]
 fn indexes_filtered_by_table() {
     let (mut cmd, _dir, db) = common::make_catalogue();
-    cmd.args(["indexes", "--db"]).arg(&db).args(["--table", "albums"]);
+    cmd.args(["indexes", "--db"])
+        .arg(&db)
+        .args(["--table", "albums"]);
     let out = cmd.assert().success().get_output().clone();
     let v = common::parse_json_stdout(&out);
     let arr = v.as_array().unwrap();
@@ -86,7 +88,9 @@ fn indexes_filtered_by_table() {
 #[test]
 fn indexes_missing_table_exits_with_not_found_code() {
     let (mut cmd, _dir, db) = common::make_catalogue();
-    cmd.args(["indexes", "--db"]).arg(&db).args(["--table", "nope"]);
+    cmd.args(["indexes", "--db"])
+        .arg(&db)
+        .args(["--table", "nope"]);
     let out = cmd.assert().failure().code(3).get_output().clone();
     let err = common::parse_json_stderr(&out);
     assert_eq!(err["error"]["code"], "not_found");

@@ -23,7 +23,14 @@ fn tables_excludes_sqlite_internal() {
 #[test]
 fn tables_returns_row_counts_including_zero() {
     let file = common::make_empty();
-    let db = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     db.exec("CREATE TABLE t1(x INTEGER);", &[]).unwrap();
     db.exec("CREATE TABLE t2(x INTEGER);", &[]).unwrap();
     db.exec("INSERT INTO t2 VALUES (1),(2),(3);", &[]).unwrap();
@@ -42,7 +49,11 @@ fn views_returned_with_sql() {
     let views = db.views().unwrap();
     assert_eq!(views.len(), 1);
     assert_eq!(views[0].name, "recent_albums");
-    assert!(views[0].sql.as_deref().unwrap_or("").contains("year >= 2000"));
+    assert!(views[0]
+        .sql
+        .as_deref()
+        .unwrap_or("")
+        .contains("year >= 2000"));
 }
 
 #[test]
@@ -69,12 +80,16 @@ fn indexes_missing_table_is_not_found() {
 #[test]
 fn indexes_reports_unique_and_origin() {
     let file = common::make_empty();
-    let db = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
-    db.exec(
-        "CREATE TABLE t (a INTEGER, b TEXT UNIQUE);",
-        &[],
+    let db = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
     )
     .unwrap();
+    db.exec("CREATE TABLE t (a INTEGER, b TEXT UNIQUE);", &[])
+        .unwrap();
     db.exec("CREATE INDEX ix_t_a ON t(a);", &[]).unwrap();
 
     let idx = db.indexes(Some("t")).unwrap();
@@ -96,7 +111,12 @@ fn schema_describes_columns_pk_fk_and_indexes() {
     assert!(matches!(schema.kind, TableKind::Table));
     assert_eq!(schema.columns.len(), 4);
 
-    let pk: Vec<_> = schema.columns.iter().filter(|c| c.pk > 0).map(|c| c.name.as_str()).collect();
+    let pk: Vec<_> = schema
+        .columns
+        .iter()
+        .filter(|c| c.pk > 0)
+        .map(|c| c.name.as_str())
+        .collect();
     assert_eq!(pk, vec!["id"]);
 
     let title = schema.columns.iter().find(|c| c.name == "title").unwrap();
@@ -112,7 +132,14 @@ fn schema_describes_columns_pk_fk_and_indexes() {
 #[test]
 fn schema_handles_composite_primary_key() {
     let file = common::make_empty();
-    let db = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     db.exec(
         "CREATE TABLE compo (\
            a INTEGER NOT NULL, \
@@ -138,7 +165,14 @@ fn schema_handles_composite_primary_key() {
 #[test]
 fn schema_default_values_are_surfaced() {
     let file = common::make_empty();
-    let db = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     db.exec(
         "CREATE TABLE d (\
            a INTEGER DEFAULT 7, \
@@ -180,7 +214,14 @@ fn schema_missing_object_is_not_found() {
 #[test]
 fn schema_handles_identifier_with_spaces_and_quotes() {
     let file = common::make_empty();
-    let db = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     // Table name with a space and an embedded double-quote. quote_ident must
     // escape the inner quote; otherwise the CREATE would fail or the later
     // PRAGMA would reference the wrong object.
@@ -206,7 +247,14 @@ fn schema_handles_identifier_with_spaces_and_quotes() {
 #[test]
 fn tables_are_sorted_case_sensitive_ascending() {
     let file = common::make_empty();
-    let db = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     db.exec("CREATE TABLE zebra(x INT);", &[]).unwrap();
     db.exec("CREATE TABLE apple(x INT);", &[]).unwrap();
     db.exec("CREATE TABLE mango(x INT);", &[]).unwrap();
@@ -217,7 +265,14 @@ fn tables_are_sorted_case_sensitive_ascending() {
 #[test]
 fn schema_without_rowid_still_has_pk_columns() {
     let file = common::make_empty();
-    let db = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     db.exec(
         "CREATE TABLE w (a INTEGER NOT NULL, b TEXT NOT NULL, PRIMARY KEY(a,b)) WITHOUT ROWID;",
         &[],

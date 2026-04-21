@@ -13,8 +13,19 @@ use tempfile::NamedTempFile;
 /// file disappears.
 pub fn make_catalogue() -> NamedTempFile {
     let file = NamedTempFile::new().unwrap();
-    let db = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: Some(1_000) }).unwrap();
-    db.exec("CREATE TABLE artists (id INTEGER PRIMARY KEY, name TEXT NOT NULL);", &[]).unwrap();
+    let db = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: Some(1_000),
+        },
+    )
+    .unwrap();
+    db.exec(
+        "CREATE TABLE artists (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+        &[],
+    )
+    .unwrap();
     db.exec(
         "CREATE TABLE albums (\
            id INTEGER PRIMARY KEY,\
@@ -25,7 +36,8 @@ pub fn make_catalogue() -> NamedTempFile {
         &[],
     )
     .unwrap();
-    db.exec("CREATE INDEX idx_albums_artist ON albums(artist_id);", &[]).unwrap();
+    db.exec("CREATE INDEX idx_albums_artist ON albums(artist_id);", &[])
+        .unwrap();
     db.exec(
         "CREATE VIEW recent_albums AS SELECT * FROM albums WHERE year >= 2000;",
         &[],
@@ -55,6 +67,13 @@ pub fn make_catalogue() -> NamedTempFile {
 /// Fresh empty DB — the connection itself is discarded, just keeps the file.
 pub fn make_empty() -> NamedTempFile {
     let file = NamedTempFile::new().unwrap();
-    let _ = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let _ = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     file
 }

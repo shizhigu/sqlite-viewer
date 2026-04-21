@@ -10,7 +10,10 @@ pub struct AppError {
 
 impl From<sqlv_core::Error> for AppError {
     fn from(e: sqlv_core::Error) -> Self {
-        AppError { code: e.code().to_string(), message: e.to_string() }
+        AppError {
+            code: e.code().to_string(),
+            message: e.to_string(),
+        }
     }
 }
 

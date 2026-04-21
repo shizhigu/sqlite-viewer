@@ -88,7 +88,9 @@ fn query_with_offset() {
 #[test]
 fn query_syntax_error_exit_code_5() {
     let (mut cmd, _dir, db) = common::make_catalogue();
-    cmd.args(["query", "--db"]).arg(&db).arg("SELEKT * FROM artists");
+    cmd.args(["query", "--db"])
+        .arg(&db)
+        .arg("SELEKT * FROM artists");
     let out = cmd.assert().failure().code(5).get_output().clone();
     let err = common::parse_json_stderr(&out);
     assert_eq!(err["error"]["code"], "sql");
@@ -97,9 +99,7 @@ fn query_syntax_error_exit_code_5() {
 #[test]
 fn query_null_round_trip() {
     let (mut cmd, _dir, db) = common::make_catalogue();
-    cmd.args(["query", "--db"])
-        .arg(&db)
-        .arg("SELECT NULL, 'x'");
+    cmd.args(["query", "--db"]).arg(&db).arg("SELECT NULL, 'x'");
     let out = cmd.assert().success().get_output().clone();
     let v = common::parse_json_stdout(&out);
     assert_eq!(v["rows"][0][0], json!(null));
@@ -114,10 +114,7 @@ fn query_blob_emits_base64_tagged_object() {
         .arg("SELECT x'deadbeef'");
     let out = cmd.assert().success().get_output().clone();
     let v = common::parse_json_stdout(&out);
-    assert_eq!(
-        v["rows"][0][0]["$blob_base64"],
-        json!("3q2+7w==")
-    );
+    assert_eq!(v["rows"][0][0]["$blob_base64"], json!("3q2+7w=="));
 }
 
 #[test]

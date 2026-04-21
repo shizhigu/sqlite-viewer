@@ -25,7 +25,10 @@ pub struct CsvImportOpts {
 
 impl Default for CsvImportOpts {
     fn default() -> Self {
-        Self { has_header: true, delimiter: b',' }
+        Self {
+            has_header: true,
+            delimiter: b',',
+        }
     }
 }
 
@@ -114,8 +117,7 @@ impl Db {
                     columns.join(", ")
                 )));
             }
-            let params: Vec<Value> =
-                rec.iter().map(|s| Value::Text(s.to_string())).collect();
+            let params: Vec<Value> = rec.iter().map(|s| Value::Text(s.to_string())).collect();
             match stmt.execute(rusqlite::params_from_iter(params.iter())) {
                 Ok(_) => count += 1,
                 Err(e) => {

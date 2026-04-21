@@ -22,8 +22,11 @@ fn stats_reports_per_table_row_counts() {
     let s = db.stats().unwrap();
     let names: Vec<&str> = s.tables.iter().map(|t| t.name.as_str()).collect();
     assert_eq!(names, vec!["albums", "artists"]);
-    let rc: std::collections::HashMap<_, _> =
-        s.tables.iter().map(|t| (t.name.as_str(), t.row_count)).collect();
+    let rc: std::collections::HashMap<_, _> = s
+        .tables
+        .iter()
+        .map(|t| (t.name.as_str(), t.row_count))
+        .collect();
     assert_eq!(rc["albums"], 4);
     assert_eq!(rc["artists"], 3);
 }

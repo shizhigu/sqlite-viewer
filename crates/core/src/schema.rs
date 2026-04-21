@@ -84,17 +84,25 @@ impl Db {
         for row in rows {
             let (name, sql) = row?;
             let row_count = self.table_row_count(&name).ok();
-            out.push(TableInfo { name, kind: TableKind::Table, row_count, sql });
+            out.push(TableInfo {
+                name,
+                kind: TableKind::Table,
+                row_count,
+                sql,
+            });
         }
         Ok(out)
     }
 
     pub fn views(&self) -> Result<Vec<ViewInfo>> {
-        let mut stmt = self.conn().prepare(
-            "SELECT name, sql FROM sqlite_master WHERE type='view' ORDER BY name",
-        )?;
+        let mut stmt = self
+            .conn()
+            .prepare("SELECT name, sql FROM sqlite_master WHERE type='view' ORDER BY name")?;
         let rows = stmt.query_map([], |r| {
-            Ok(ViewInfo { name: r.get(0)?, sql: r.get(1)? })
+            Ok(ViewInfo {
+                name: r.get(0)?,
+                sql: r.get(1)?,
+            })
         })?;
         Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }

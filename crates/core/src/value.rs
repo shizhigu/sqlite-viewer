@@ -84,9 +84,8 @@ impl From<ValueRef<'_>> for Value {
 // Minimal RFC 4648 base64 encoder. Kept inline to avoid a dep for a handful
 // of bytes — we only hit this path for blob cells.
 fn b64_encode(input: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
     let mut chunks = input.chunks_exact(3);
     for c in chunks.by_ref() {
         let n = ((c[0] as u32) << 16) | ((c[1] as u32) << 8) | (c[2] as u32);
@@ -124,7 +123,10 @@ mod tests {
     fn json_shapes() {
         assert_eq!(serde_json::to_string(&Value::Null).unwrap(), "null");
         assert_eq!(serde_json::to_string(&Value::Integer(42)).unwrap(), "42");
-        assert_eq!(serde_json::to_string(&Value::Text("hi".into())).unwrap(), "\"hi\"");
+        assert_eq!(
+            serde_json::to_string(&Value::Text("hi".into())).unwrap(),
+            "\"hi\""
+        );
         assert_eq!(
             serde_json::to_string(&Value::Blob(vec![0xde, 0xad, 0xbe, 0xef])).unwrap(),
             "{\"$blob_base64\":\"3q2+7w==\"}"

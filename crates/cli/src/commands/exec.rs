@@ -13,7 +13,10 @@ pub fn run(args: ExecArgs, force_json: bool) -> Result<(), Failure> {
     }
     let db = Db::open(
         &args.db.db,
-        OpenOpts { read_only: false, timeout_ms: Some(5_000) },
+        OpenOpts {
+            read_only: false,
+            timeout_ms: Some(5_000),
+        },
     )?;
     let params = parse_params(&args.params)?;
     let res = db.exec(&args.sql, &params)?;

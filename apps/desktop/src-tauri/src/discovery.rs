@@ -65,7 +65,12 @@ pub fn register(port: u16) -> io::Result<Instance> {
     let pid = std::process::id();
     let started_at = humantime::format_rfc3339_seconds_or_now();
 
-    let info = InstanceInfo { pid, port, token, started_at };
+    let info = InstanceInfo {
+        pid,
+        port,
+        token,
+        started_at,
+    };
     let path = dir()?.join(format!("{pid}.json"));
 
     let body = serde_json::to_vec_pretty(&info).map_err(io::Error::other)?;
@@ -86,8 +91,7 @@ pub fn register(port: u16) -> io::Result<Instance> {
 
 fn generate_token() -> io::Result<String> {
     let mut buf = [0u8; 24];
-    getrandom::getrandom(&mut buf)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("getrandom: {e}")))?;
+    getrandom::getrandom(&mut buf).map_err(|e| io::Error::other(format!("getrandom: {e}")))?;
     let mut s = String::with_capacity(buf.len() * 2);
     for b in buf {
         use std::fmt::Write;
@@ -128,7 +132,11 @@ mod humantime {
 
     // Howard Hinnant's proleptic Gregorian algorithm.
     fn civil_from_days(z: i64) -> (i32, u32, u32) {
-        let era = if z >= 0 { z / 146_097 } else { (z - 146_096) / 146_097 };
+        let era = if z >= 0 {
+            z / 146_097
+        } else {
+            (z - 146_096) / 146_097
+        };
         let doe = (z - era * 146_097) as u64;
         let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
         let y = yoe as i64 + era * 400;

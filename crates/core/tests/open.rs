@@ -31,7 +31,14 @@ fn open_readwrite_on_missing_file_creates_it() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("new.db");
     assert!(!path.exists());
-    let db = Db::open(&path, OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        &path,
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     assert!(!db.is_read_only());
     drop(db);
     assert!(path.exists());
@@ -41,15 +48,26 @@ fn open_readwrite_on_missing_file_creates_it() {
 fn writes_rejected_when_readonly() {
     let fixture = common::make_catalogue();
     let db = Db::open(fixture.path(), OpenOpts::default()).unwrap();
-    let err = db.exec("INSERT INTO artists(name) VALUES ('nope')", &[]).unwrap_err();
+    let err = db
+        .exec("INSERT INTO artists(name) VALUES ('nope')", &[])
+        .unwrap_err();
     assert_eq!(err.code(), "readonly");
 }
 
 #[test]
 fn writes_allowed_when_readwrite() {
     let fixture = common::make_catalogue();
-    let db = Db::open(fixture.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
-    let res = db.exec("INSERT INTO artists(name) VALUES ('Test')", &[]).unwrap();
+    let db = Db::open(
+        fixture.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
+    let res = db
+        .exec("INSERT INTO artists(name) VALUES ('Test')", &[])
+        .unwrap();
     assert_eq!(res.rows_affected, 1);
     assert!(res.last_insert_rowid > 0);
 }
@@ -58,7 +76,14 @@ fn writes_allowed_when_readwrite() {
 fn foreign_keys_are_enabled_by_default() {
     // Reopen read-write and try to violate FK; should error, proving FKs are on.
     let fixture = common::make_catalogue();
-    let db = Db::open(fixture.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        fixture.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     let err = db
         .exec(
             "INSERT INTO albums (title, artist_id, year) VALUES ('Bad', 999, 2020)",

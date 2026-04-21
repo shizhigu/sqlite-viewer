@@ -128,7 +128,11 @@ fn route(
     }
 
     if !is_authorized(&req, auth_token) {
-        return req.respond(json_error(401, "unauthorized", "missing or invalid X-Sqlv-Token header"));
+        return req.respond(json_error(
+            401,
+            "unauthorized",
+            "missing or invalid X-Sqlv-Token header",
+        ));
     }
 
     match (method, url.as_str()) {
@@ -211,7 +215,10 @@ fn handle_query(
     let req: PushRequest = serde_json::from_str(body).map_err(|e| {
         (
             400,
-            AppError { code: "invalid".into(), message: format!("invalid JSON: {e}") },
+            AppError {
+                code: "invalid".into(),
+                message: format!("invalid JSON: {e}"),
+            },
         )
     })?;
 
@@ -275,13 +282,22 @@ fn handle_open(
     let req: OpenRequest = serde_json::from_str(body).map_err(|e| {
         (
             400,
-            AppError { code: "invalid".into(), message: format!("invalid JSON: {e}") },
+            AppError {
+                code: "invalid".into(),
+                message: format!("invalid JSON: {e}"),
+            },
         )
     })?;
 
     let read_only = req.read_only.unwrap_or(true);
     let path = PathBuf::from(&req.path);
-    match Db::open(&path, OpenOpts { read_only, timeout_ms: Some(5_000) }) {
+    match Db::open(
+        &path,
+        OpenOpts {
+            read_only,
+            timeout_ms: Some(5_000),
+        },
+    ) {
         Ok(db) => match db.meta() {
             Ok(meta) => {
                 *lock_state(state) = Some(db);
@@ -338,7 +354,9 @@ fn lock_state(state: &Arc<AppState>) -> std::sync::MutexGuard<'_, Option<Db>> {
 
 fn json_ok<T: Serialize>(value: &T) -> Response<std::io::Cursor<Vec<u8>>> {
     let body = serde_json::to_vec(value).unwrap_or_else(|_| b"null".to_vec());
-    Response::from_data(body).with_status_code(200).with_header(json_header())
+    Response::from_data(body)
+        .with_status_code(200)
+        .with_header(json_header())
 }
 
 fn json_error(status: u16, code: &str, message: &str) -> Response<std::io::Cursor<Vec<u8>>> {
@@ -346,14 +364,19 @@ fn json_error(status: u16, code: &str, message: &str) -> Response<std::io::Curso
         "error": { "code": code, "message": message }
     }))
     .unwrap_or_else(|_| br#"{"error":{"code":"other","message":"serialization failed"}}"#.to_vec());
-    Response::from_data(body).with_status_code(status).with_header(json_header())
+    Response::from_data(body)
+        .with_status_code(status)
+        .with_header(json_header())
 }
 
 fn json_header() -> Header {
     // Both strings are 'static valid HTTP headers — this parse can't fail.
     // The or_else branch is defensive only.
-    Header::from_bytes(&b"Content-Type"[..], &b"application/json; charset=utf-8"[..])
-        .unwrap_or_else(|_| Header::from_bytes(&b"X"[..], &b"x"[..]).unwrap_or_else(|_| unreachable!()))
+    Header::from_bytes(
+        &b"Content-Type"[..],
+        &b"application/json; charset=utf-8"[..],
+    )
+    .unwrap_or_else(|_| Header::from_bytes(&b"X"[..], &b"x"[..]).unwrap_or_else(|_| unreachable!()))
 }
 
 // Existing Instance ref kept alive by the server thread — imported for

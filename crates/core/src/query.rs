@@ -13,7 +13,10 @@ pub struct Page {
 impl Default for Page {
     fn default() -> Self {
         // Sensible ceiling for agent-driven queries; callers can override.
-        Self { limit: 1000, offset: 0 }
+        Self {
+            limit: 1000,
+            offset: 0,
+        }
     }
 }
 
@@ -40,8 +43,7 @@ impl Db {
 
         let mut stmt = self.conn().prepare(sql)?;
 
-        let column_names: Vec<String> =
-            stmt.column_names().into_iter().map(String::from).collect();
+        let column_names: Vec<String> = stmt.column_names().into_iter().map(String::from).collect();
 
         let column_types: Vec<Option<String>> = (0..stmt.column_count())
             .map(|i| {

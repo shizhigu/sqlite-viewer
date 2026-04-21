@@ -17,7 +17,10 @@ pub fn run(args: QueryArgs, force_json: bool) -> Result<(), Failure> {
         return run_streaming(&db, &args, &params);
     }
 
-    let page = Page { limit: args.limit, offset: args.offset };
+    let page = Page {
+        limit: args.limit,
+        offset: args.offset,
+    };
     let res = db.query(&args.sql, &params, page)?;
     output::emit(&res, force_json);
     Ok(())
@@ -38,12 +41,14 @@ fn run_streaming(
     let stdout = io::stdout();
     let mut out = stdout.lock();
 
-    let mut res = db
-        .query(
-            &args.sql,
-            params,
-            Page { limit: args.limit, offset: args.offset },
-        )?;
+    let mut res = db.query(
+        &args.sql,
+        params,
+        Page {
+            limit: args.limit,
+            offset: args.offset,
+        },
+    )?;
 
     // Header first.
     let header = serde_json::json!({

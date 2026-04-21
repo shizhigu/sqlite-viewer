@@ -43,7 +43,14 @@ fn meta_is_json_serializable_with_stable_fields() {
 #[test]
 fn meta_reflects_user_version_pragma() {
     let file = common::make_empty();
-    let db = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     db.exec("PRAGMA user_version = 42", &[]).unwrap();
     let m = db.meta().unwrap();
     assert_eq!(m.user_version, 42);
@@ -52,6 +59,13 @@ fn meta_reflects_user_version_pragma() {
 #[test]
 fn meta_reflects_readwrite_flag() {
     let fixture = common::make_catalogue();
-    let db = Db::open(fixture.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        fixture.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     assert!(!db.meta().unwrap().read_only);
 }

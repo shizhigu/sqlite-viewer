@@ -32,7 +32,9 @@ struct Server {
 
 impl Server {
     fn new() -> Self {
-        Self { db: Mutex::new(None) }
+        Self {
+            db: Mutex::new(None),
+        }
     }
 }
 
@@ -193,21 +195,27 @@ fn call_tool(server: &Server, params: &Value) -> Result<Value, JsonRpcError> {
         .get("name")
         .and_then(|v| v.as_str())
         .ok_or_else(|| usage("tools/call missing `name`"))?;
-    let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+    let args = params
+        .get("arguments")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
 
     let result_json: Value = match name {
         "sqlv_open" => tool_open(server, &args)?,
         "sqlv_tables" => with_db(server, |db| {
-            db.tables().map(|t| serde_json::to_value(t).unwrap_or(json!([])))
+            db.tables()
+                .map(|t| serde_json::to_value(t).unwrap_or(json!([])))
         })?,
         "sqlv_views" => with_db(server, |db| {
-            db.views().map(|t| serde_json::to_value(t).unwrap_or(json!([])))
+            db.views()
+                .map(|t| serde_json::to_value(t).unwrap_or(json!([])))
         })?,
         "sqlv_schema" => tool_schema(server, &args)?,
         "sqlv_query" => tool_query(server, &args)?,
         "sqlv_exec" => tool_exec(server, &args)?,
         "sqlv_stats" => with_db(server, |db| {
-            db.stats().map(|s| serde_json::to_value(s).unwrap_or(json!(null)))
+            db.stats()
+                .map(|s| serde_json::to_value(s).unwrap_or(json!(null)))
         })?,
         other => return Err(usage(&format!("unknown tool: {other}"))),
     };
@@ -226,7 +234,10 @@ fn tool_open(server: &Server, args: &Value) -> Result<Value, JsonRpcError> {
         .unwrap_or(true);
     let db = Db::open(
         &PathBuf::from(path),
-        OpenOpts { read_only, timeout_ms: Some(5_000) },
+        OpenOpts {
+            read_only,
+            timeout_ms: Some(5_000),
+        },
     )
     .map_err(core_err)?;
     let meta = db.meta().map_err(core_err)?;
@@ -316,11 +327,17 @@ fn core_err(e: sqlv_core::Error) -> JsonRpcError {
         "invalid" => -32602,
         _ => -32000,
     };
-    JsonRpcError { code, message: e.to_string() }
+    JsonRpcError {
+        code,
+        message: e.to_string(),
+    }
 }
 
 fn usage(msg: &str) -> JsonRpcError {
-    JsonRpcError { code: -32602, message: msg.into() }
+    JsonRpcError {
+        code: -32602,
+        message: msg.into(),
+    }
 }
 
 /// MCP wants tool results as `{content: [{type, text}], isError: bool}`.

@@ -17,7 +17,10 @@ pub struct OpenOpts {
 
 impl Default for OpenOpts {
     fn default() -> Self {
-        Self { read_only: true, timeout_ms: Some(5_000) }
+        Self {
+            read_only: true,
+            timeout_ms: Some(5_000),
+        }
     }
 }
 
@@ -52,7 +55,11 @@ impl Db {
         // Enforce FK constraints consistently across desktop + CLI.
         conn.pragma_update(None, "foreign_keys", "ON")?;
 
-        Ok(Self { conn, path: path.to_path_buf(), read_only: opts.read_only })
+        Ok(Self {
+            conn,
+            path: path.to_path_buf(),
+            read_only: opts.read_only,
+        })
     }
 
     pub fn path(&self) -> &Path {

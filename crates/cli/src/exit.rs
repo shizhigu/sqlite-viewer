@@ -19,7 +19,11 @@ pub struct Failure {
 
 impl Failure {
     pub fn new(code: &'static str, message: impl Into<String>, exit: i32) -> Self {
-        Self { code, message: message.into(), exit }
+        Self {
+            code,
+            message: message.into(),
+            exit,
+        }
     }
 
     pub fn usage(message: impl Into<String>) -> Self {
@@ -55,6 +59,10 @@ impl From<sqlv_core::Error> for Failure {
                 ("other", EXIT_OTHER)
             }
         };
-        Self { code, message: e.to_string(), exit }
+        Self {
+            code,
+            message: e.to_string(),
+            exit,
+        }
     }
 }

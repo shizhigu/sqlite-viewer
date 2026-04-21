@@ -52,15 +52,16 @@ impl Db {
                     rusqlite::types::ValueRef::Null => "".into(),
                     rusqlite::types::ValueRef::Integer(n) => n.to_string(),
                     rusqlite::types::ValueRef::Real(f) => f.to_string(),
-                    rusqlite::types::ValueRef::Text(b) => {
-                        String::from_utf8_lossy(b).into_owned()
-                    }
+                    rusqlite::types::ValueRef::Text(b) => String::from_utf8_lossy(b).into_owned(),
                     rusqlite::types::ValueRef::Blob(_) => "<blob>".into(),
                 });
             }
             values.push(r);
         }
-        Ok(PragmaValue { name: name.to_string(), values })
+        Ok(PragmaValue {
+            name: name.to_string(),
+            values,
+        })
     }
 }
 
@@ -73,7 +74,9 @@ fn is_safe_pragma_value(s: &str) -> bool {
         return false;
     }
     // Numeric (possibly signed).
-    if s.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '+' || c == '.') {
+    if s.chars()
+        .all(|c| c.is_ascii_digit() || c == '-' || c == '+' || c == '.')
+    {
         return true;
     }
     // Single-quoted literal, no embedded quotes.

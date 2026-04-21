@@ -24,7 +24,10 @@ pub fn run(args: ImportArgs, force_json: bool) -> Result<(), Failure> {
 
     let db = Db::open(
         &args.db.db,
-        OpenOpts { read_only: false, timeout_ms: Some(30_000) },
+        OpenOpts {
+            read_only: false,
+            timeout_ms: Some(30_000),
+        },
     )?;
     let res = db.import_csv(&args.file, &args.table, opts)?;
     output::emit(&res, force_json);

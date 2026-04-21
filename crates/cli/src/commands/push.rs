@@ -70,37 +70,6 @@ fn absolutize(path: &str) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn absolute_input_passes_through() {
-        assert_eq!(absolutize("/tmp/foo.db"), "/tmp/foo.db");
-    }
-
-    #[test]
-    fn relative_input_is_joined_with_cwd() {
-        let cwd = std::env::current_dir().unwrap();
-        let expected = cwd.join("samples/foo.db").to_string_lossy().into_owned();
-        assert_eq!(absolutize("samples/foo.db"), expected);
-    }
-
-    #[test]
-    fn dot_slash_is_joined() {
-        let cwd = std::env::current_dir().unwrap();
-        let expected = cwd.join("./x.db").to_string_lossy().into_owned();
-        assert_eq!(absolutize("./x.db"), expected);
-    }
-
-    #[test]
-    fn absolutize_does_not_require_existence() {
-        // The path clearly doesn't exist; absolutize must still succeed.
-        let out = absolutize("no-such/path/ever.sqlite");
-        assert!(std::path::Path::new(&out).is_absolute());
-    }
-}
-
 fn send_request(
     port_override: Option<u16>,
     path: &str,
@@ -149,9 +118,9 @@ fn send_request(
                 return Ok(v);
             }
             Err(ureq::Error::Status(code, resp)) => {
-                let v: serde_json::Value = resp.into_json().unwrap_or_else(|_| {
-                    json!({"error": {"code": "other", "message": format!("HTTP {code}")}})
-                });
+                let v: serde_json::Value = resp.into_json().unwrap_or_else(
+                    |_| json!({"error": {"code": "other", "message": format!("HTTP {code}")}}),
+                );
                 return Err(failure_from_http(code, &v));
             }
             Err(e) => {
@@ -236,9 +205,8 @@ fn value_to_json(v: &sqlv_core::Value) -> serde_json::Value {
 }
 
 fn b64_encode(bytes: &[u8]) -> String {
-    const A: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity((bytes.len() + 2) / 3 * 4);
+    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     let mut chunks = bytes.chunks_exact(3);
     for c in chunks.by_ref() {
         let n = ((c[0] as u32) << 16) | ((c[1] as u32) << 8) | (c[2] as u32);
@@ -264,4 +232,35 @@ fn b64_encode(bytes: &[u8]) -> String {
         _ => {}
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn absolute_input_passes_through() {
+        assert_eq!(absolutize("/tmp/foo.db"), "/tmp/foo.db");
+    }
+
+    #[test]
+    fn relative_input_is_joined_with_cwd() {
+        let cwd = std::env::current_dir().unwrap();
+        let expected = cwd.join("samples/foo.db").to_string_lossy().into_owned();
+        assert_eq!(absolutize("samples/foo.db"), expected);
+    }
+
+    #[test]
+    fn dot_slash_is_joined() {
+        let cwd = std::env::current_dir().unwrap();
+        let expected = cwd.join("./x.db").to_string_lossy().into_owned();
+        assert_eq!(absolutize("./x.db"), expected);
+    }
+
+    #[test]
+    fn absolutize_does_not_require_existence() {
+        // The path clearly doesn't exist; absolutize must still succeed.
+        let out = absolutize("no-such/path/ever.sqlite");
+        assert!(std::path::Path::new(&out).is_absolute());
+    }
 }

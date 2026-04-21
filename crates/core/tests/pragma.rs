@@ -30,7 +30,14 @@ fn set_pragma_requires_readwrite() {
 #[test]
 fn set_pragma_numeric_value() {
     let file = common::make_empty();
-    let db = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     let p = db.pragma("user_version", Some("42")).unwrap();
     assert_eq!(p.values, vec![vec!["42".to_string()]]);
 }
@@ -38,7 +45,14 @@ fn set_pragma_numeric_value() {
 #[test]
 fn set_pragma_keyword_value() {
     let file = common::make_empty();
-    let db = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     // journal_mode accepts bare keywords like WAL, DELETE, MEMORY.
     let p = db.pragma("journal_mode", Some("MEMORY")).unwrap();
     assert_eq!(p.values[0][0].to_lowercase(), "memory");
@@ -48,14 +62,23 @@ fn set_pragma_keyword_value() {
 fn rejects_pragma_name_with_injection_chars() {
     let fixture = common::make_catalogue();
     let db = Db::open(fixture.path(), OpenOpts::default()).unwrap();
-    let err = db.pragma("user_version; DROP TABLE artists", None).unwrap_err();
+    let err = db
+        .pragma("user_version; DROP TABLE artists", None)
+        .unwrap_err();
     assert_eq!(err.code(), "invalid");
 }
 
 #[test]
 fn rejects_pragma_value_with_injection_chars() {
     let file = common::make_empty();
-    let db = Db::open(file.path(), OpenOpts { read_only: false, timeout_ms: None }).unwrap();
+    let db = Db::open(
+        file.path(),
+        OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
+    )
+    .unwrap();
     let err = db
         .pragma("user_version", Some("1; DROP TABLE t; --"))
         .unwrap_err();

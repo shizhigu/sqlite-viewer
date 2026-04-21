@@ -24,7 +24,10 @@ pub fn ping() -> Res<String> {
 pub fn open_db(state: State<Arc<AppState>>, path: String, read_only: bool) -> Res<DbMeta> {
     let db = Db::open(
         &PathBuf::from(&path),
-        OpenOpts { read_only, timeout_ms: Some(5_000) },
+        OpenOpts {
+            read_only,
+            timeout_ms: Some(5_000),
+        },
     )?;
     let meta = db.meta()?;
     *state.current.lock().unwrap() = Some(db);
@@ -49,7 +52,9 @@ pub fn list_views(state: State<Arc<AppState>>) -> Res<Vec<ViewInfo>> {
 
 #[allow(dead_code)]
 pub fn list_indexes(state: State<Arc<AppState>>, table: Option<String>) -> Res<Vec<IndexInfo>> {
-    with_db(&state, |db| db.indexes(table.as_deref()).map_err(AppError::from))
+    with_db(&state, |db| {
+        db.indexes(table.as_deref()).map_err(AppError::from)
+    })
 }
 
 #[tauri::command]
@@ -67,7 +72,8 @@ pub fn run_query(
 ) -> Res<QueryResult> {
     let params: Vec<Value> = params.iter().map(Value::from_json).collect();
     with_db(&state, |db| {
-        db.query(&sql, &params, Page { limit, offset }).map_err(AppError::from)
+        db.query(&sql, &params, Page { limit, offset })
+            .map_err(AppError::from)
     })
 }
 

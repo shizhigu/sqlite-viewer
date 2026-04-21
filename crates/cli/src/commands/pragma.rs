@@ -13,7 +13,10 @@ pub fn run(args: PragmaArgs, force_json: bool) -> Result<(), Failure> {
     }
 
     let opts = if setting {
-        OpenOpts { read_only: false, timeout_ms: Some(5_000) }
+        OpenOpts {
+            read_only: false,
+            timeout_ms: Some(5_000),
+        }
     } else {
         OpenOpts::default()
     };

@@ -12,7 +12,11 @@ pub struct DumpFilter<'a> {
 
 impl Default for DumpFilter<'_> {
     fn default() -> Self {
-        Self { schema: true, data: true, only_tables: None }
+        Self {
+            schema: true,
+            data: true,
+            only_tables: None,
+        }
     }
 }
 
@@ -39,11 +43,7 @@ impl Db {
         Ok(out)
     }
 
-    fn dump_schema(
-        &self,
-        out: &mut String,
-        only: Option<&[String]>,
-    ) -> Result<()> {
+    fn dump_schema(&self, out: &mut String, only: Option<&[String]>) -> Result<()> {
         // Emit tables first, then indexes/triggers/views — matches `.dump` in
         // the sqlite3 shell. Use `WHERE type IN (...)` ordered so that parent
         // objects come before their indexes.
@@ -94,8 +94,7 @@ impl Db {
         let qt = quote_ident(table);
         let select_sql = format!("SELECT * FROM {qt}");
         let mut stmt = self.conn().prepare(&select_sql)?;
-        let col_names: Vec<String> =
-            stmt.column_names().into_iter().map(String::from).collect();
+        let col_names: Vec<String> = stmt.column_names().into_iter().map(String::from).collect();
         if col_names.is_empty() {
             return Ok(());
         }

@@ -15,15 +15,15 @@ use crate::exit::Failure;
 pub fn parse_params(raw: &[String]) -> Result<Vec<Value>, Failure> {
     raw.iter()
         .enumerate()
-        .map(|(i, s)| parse_one(s).map_err(|e| {
-            Failure::usage(format!("--param #{}: {}: {}", i + 1, e, s))
-        }))
+        .map(|(i, s)| {
+            parse_one(s).map_err(|e| Failure::usage(format!("--param #{}: {}: {}", i + 1, e, s)))
+        })
         .collect()
 }
 
 fn parse_one(raw: &str) -> Result<Value, String> {
-    let v: serde_json::Value = serde_json::from_str(raw)
-        .map_err(|e| format!("invalid JSON ({e})"))?;
+    let v: serde_json::Value =
+        serde_json::from_str(raw).map_err(|e| format!("invalid JSON ({e})"))?;
     Ok(Value::from_json(&v))
 }
 

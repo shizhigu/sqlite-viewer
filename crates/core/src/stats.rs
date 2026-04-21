@@ -22,8 +22,9 @@ pub struct DbStats {
 impl Db {
     pub fn stats(&self) -> Result<DbStats> {
         let meta = self.meta()?;
-        let freelist_count: i64 =
-            self.conn().query_row("PRAGMA freelist_count", [], |r| r.get(0))?;
+        let freelist_count: i64 = self
+            .conn()
+            .query_row("PRAGMA freelist_count", [], |r| r.get(0))?;
 
         let mut tables = Vec::new();
         for t in self.tables()? {

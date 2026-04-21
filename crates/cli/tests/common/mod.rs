@@ -19,7 +19,10 @@ pub fn make_catalogue() -> (Command, TempDir, std::path::PathBuf) {
     // (which we also want to test independently).
     let db = sqlv_core::Db::open(
         &db_path,
-        sqlv_core::OpenOpts { read_only: false, timeout_ms: Some(1_000) },
+        sqlv_core::OpenOpts {
+            read_only: false,
+            timeout_ms: Some(1_000),
+        },
     )
     .unwrap();
     db.exec(
@@ -69,7 +72,10 @@ pub fn make_empty() -> (Command, TempDir, std::path::PathBuf) {
     let db_path = dir.path().join("empty.sqlite");
     let _ = sqlv_core::Db::open(
         &db_path,
-        sqlv_core::OpenOpts { read_only: false, timeout_ms: None },
+        sqlv_core::OpenOpts {
+            read_only: false,
+            timeout_ms: None,
+        },
     )
     .unwrap();
     let cmd = Command::cargo_bin("sqlv").unwrap();
@@ -79,14 +85,10 @@ pub fn make_empty() -> (Command, TempDir, std::path::PathBuf) {
 /// Decode stdout as a JSON value. Panics with a helpful message if not parseable.
 pub fn parse_json_stdout(out: &std::process::Output) -> serde_json::Value {
     let s = std::str::from_utf8(&out.stdout).expect("stdout not utf-8");
-    serde_json::from_str(s).unwrap_or_else(|e| {
-        panic!("stdout not JSON: {e}\n----\n{s}\n----")
-    })
+    serde_json::from_str(s).unwrap_or_else(|e| panic!("stdout not JSON: {e}\n----\n{s}\n----"))
 }
 
 pub fn parse_json_stderr(out: &std::process::Output) -> serde_json::Value {
     let s = std::str::from_utf8(&out.stderr).expect("stderr not utf-8");
-    serde_json::from_str(s).unwrap_or_else(|e| {
-        panic!("stderr not JSON: {e}\n----\n{s}\n----")
-    })
+    serde_json::from_str(s).unwrap_or_else(|e| panic!("stderr not JSON: {e}\n----\n{s}\n----"))
 }

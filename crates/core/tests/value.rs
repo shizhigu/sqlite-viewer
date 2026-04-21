@@ -51,7 +51,9 @@ fn blob_base64_roundtrip_lengths() {
     for (bytes, expected_len) in cases {
         let s = serde_json::to_string(&Value::Blob(bytes.to_vec())).unwrap();
         // shape: {"$blob_base64":"...."}
-        let encoded = s.trim_start_matches("{\"$blob_base64\":\"").trim_end_matches("\"}");
+        let encoded = s
+            .trim_start_matches("{\"$blob_base64\":\"")
+            .trim_end_matches("\"}");
         assert_eq!(
             encoded.len(),
             *expected_len,
@@ -67,13 +69,22 @@ fn from_json_maps_primitives() {
     assert_eq!(Value::from_json(&serde_json::json!(5)), Value::Integer(5));
     assert_eq!(Value::from_json(&serde_json::json!(-3)), Value::Integer(-3));
     assert_eq!(Value::from_json(&serde_json::json!(2.5)), Value::Real(2.5));
-    assert_eq!(Value::from_json(&serde_json::json!("hi")), Value::Text("hi".into()));
+    assert_eq!(
+        Value::from_json(&serde_json::json!("hi")),
+        Value::Text("hi".into())
+    );
 }
 
 #[test]
 fn from_json_maps_bool_to_integer() {
-    assert_eq!(Value::from_json(&serde_json::json!(true)), Value::Integer(1));
-    assert_eq!(Value::from_json(&serde_json::json!(false)), Value::Integer(0));
+    assert_eq!(
+        Value::from_json(&serde_json::json!(true)),
+        Value::Integer(1)
+    );
+    assert_eq!(
+        Value::from_json(&serde_json::json!(false)),
+        Value::Integer(0)
+    );
 }
 
 #[test]
