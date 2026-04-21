@@ -83,12 +83,16 @@ export default function App() {
       result: QueryResult | null;
       error: { code: string; message: string } | null;
       token: number;
+      pending?: boolean;
+      kind?: "read_only" | "mutating";
     }>("pushed-query", (e) => {
       setPushedQuery({
         sql: e.payload.sql,
         result: e.payload.result,
         error: e.payload.error,
         token: e.payload.token,
+        pending: e.payload.pending,
+        kind: e.payload.kind,
       });
       setActiveTab("query");
       appendActivity({
@@ -100,6 +104,11 @@ export default function App() {
       });
       if (e.payload.error) {
         pushError(e.payload.error);
+      } else if (e.payload.pending) {
+        pushToast(
+          "info",
+          `Agent proposed a ${e.payload.kind === "mutating" ? "write" : "query"} — review and Run when ready.`,
+        );
       } else {
         pushToast("success", `Pushed query ran in ${e.payload.result?.elapsed_ms ?? 0} ms`);
       }

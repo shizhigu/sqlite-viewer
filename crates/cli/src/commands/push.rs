@@ -33,6 +33,7 @@ pub fn query(args: PushArgs, force_json: bool) -> Result<(), Failure> {
         "params": json_params,
         "limit": args.limit,
         "offset": args.offset,
+        "mode": if args.run { "run" } else { "auto" },
     });
 
     let resp = send_request(args.port, "/query", &body)?;

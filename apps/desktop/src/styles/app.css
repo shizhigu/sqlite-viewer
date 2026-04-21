@@ -568,11 +568,11 @@ button {
 
 .query {
   display: grid;
-  /* 4 fixed tracks. Explicit grid-row on each child so the layout doesn't
-     depend on DOM order or on whether `.query__params` is rendered — grid
-     auto-placement would otherwise pull results into row 3 and collapse
-     the editor when params are absent. */
-  grid-template-rows: auto minmax(120px, 1fr) auto minmax(0, 40%);
+  /* 5 fixed tracks. Explicit grid-row on each child so the layout doesn't
+     depend on DOM order or on whether `.query__pending` / `.query__params`
+     are rendered. Row 2 is the "pending push" pill; it collapses to 0
+     height when there's no pending push. */
+  grid-template-rows: auto auto minmax(120px, 1fr) auto minmax(0, 40%);
   height: 100%;
   min-height: 0;
   background: var(--bg-panel);
@@ -587,15 +587,99 @@ button {
   border-bottom: 2px solid var(--border-strong);
 }
 
-.query__editor {
+.query__pending,
+.query__preview {
   grid-row: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 8px var(--s-3);
+  font-size: var(--text-sm);
+  animation: pending-in var(--dur) var(--ease-spring);
+}
+
+.query__pending {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 14%, var(--bg-panel)) 0%,
+    color-mix(in srgb, var(--accent) 6%, var(--bg-panel)) 100%
+  );
+  border-bottom: 2px solid var(--accent);
+}
+
+.query__preview {
+  border-bottom: 2px solid var(--warning);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.query__preview--mutating {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--warning) 22%, var(--bg-panel)) 0%,
+    color-mix(in srgb, var(--warning) 10%, var(--bg-panel)) 100%
+  );
+}
+
+.query__preview--read_only {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 14%, var(--bg-panel)) 0%,
+    color-mix(in srgb, var(--accent) 6%, var(--bg-panel)) 100%
+  );
+  border-bottom-color: var(--accent);
+}
+
+.query__preview-icon {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--warning);
+}
+
+.query__preview--read_only .query__preview-icon {
+  color: var(--accent);
+}
+
+.query__pending-dot {
+  color: var(--accent);
+  font-size: 14px;
+  line-height: 1;
+  animation: pending-pulse 1.6s var(--ease-soft) infinite;
+}
+
+.query__pending code {
+  max-width: 480px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 6px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  border-radius: var(--r-sm);
+}
+
+@keyframes pending-in {
+  from { transform: translateY(-4px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+@keyframes pending-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .query__pending, .query__pending-dot { animation: none; }
+}
+
+.query__editor {
+  grid-row: 3;
   overflow: auto;
   min-height: 120px;
   border-bottom: 2px solid var(--border-strong);
 }
 
 .query__params {
-  grid-row: 3;
+  grid-row: 4;
   display: flex;
   gap: var(--s-2);
   padding: var(--s-2) var(--s-3);
@@ -624,7 +708,7 @@ button {
 }
 
 .query__results {
-  grid-row: 4;
+  grid-row: 5;
   overflow: hidden;
   min-height: 0;
 }

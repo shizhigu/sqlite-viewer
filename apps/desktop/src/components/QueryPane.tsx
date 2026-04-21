@@ -27,6 +27,19 @@ export function QueryPane() {
   const [params, setParams] = useState<string[]>([]);
   const [pushedBadge, setPushedBadge] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [pendingPush, setPendingPush] = useState<{
+    sql: string;
+    token: number;
+  } | null>(null);
+  // When an agent pushed a mutating query in `auto` mode, the server DOES
+  // NOT execute it — instead we populate the editor and show a prominent
+  // "Agent proposed this write" banner so the human approves explicitly.
+  const [previewPending, setPreviewPending] = useState<
+    { kind: "read_only" | "mutating" } | null
+  >(null);
+  // True whenever the editor text has diverged from "clean" state (a push
+  // landed, or a replay, or — once the user starts typing — anything).
+  const dirtyRef = useRef(false);
   const lastTokenRef = useRef<number | null>(null);
   const dark = useTheme();
 
@@ -44,17 +57,48 @@ export function QueryPane() {
 
   // When a pushed query arrives from `sqlv push`, mirror it into the editor
   // and show the result. Dedup by token so each push triggers exactly once.
+  //
+  // Concurrency rule: if the user has unsaved edits in the editor, DO NOT
+  // overwrite them. Instead stash the incoming push in `pendingPush`; the
+  // pill above the editor lets the user accept/dismiss explicitly.
   useEffect(() => {
     if (!pushedQuery) return;
     if (lastTokenRef.current === pushedQuery.token) return;
     lastTokenRef.current = pushedQuery.token;
+
+    if (dirtyRef.current) {
+      setPendingPush({ sql: pushedQuery.sql, token: pushedQuery.token });
+      return;
+    }
+
     setText(pushedQuery.sql);
-    setResult(pushedQuery.result);
-    setError(pushedQuery.error);
+    dirtyRef.current = false; // pushed text is the new "clean" baseline
+
+    if (pushedQuery.pending) {
+      // Agent proposed a write. Wait for the human to click Run.
+      setResult(null);
+      setError(null);
+      setPreviewPending({ kind: pushedQuery.kind ?? "mutating" });
+    } else {
+      setResult(pushedQuery.result);
+      setError(pushedQuery.error);
+      setPreviewPending(null);
+    }
     setPushedBadge(true);
     const t = setTimeout(() => setPushedBadge(false), 1500);
     return () => clearTimeout(t);
   }, [pushedQuery]);
+
+  const acceptPendingPush = () => {
+    if (!pendingPush) return;
+    setText(pendingPush.sql);
+    dirtyRef.current = false;
+    setPendingPush(null);
+    setPushedBadge(true);
+    setTimeout(() => setPushedBadge(false), 1500);
+  };
+
+  const dismissPendingPush = () => setPendingPush(null);
 
   // Detect ?N placeholders and size the params array accordingly.
   const placeholderCount = useMemo(() => {
@@ -77,6 +121,11 @@ export function QueryPane() {
     if (!meta) return;
     setRunning(true);
     setError(null);
+    // Running commits the current editor text — subsequent pushes may
+    // replace it without the "1 pending" pill unless the user edits again.
+    dirtyRef.current = false;
+    // Approving a pending agent-write: clear the banner.
+    setPreviewPending(null);
     try {
       const parsed: Value[] = params.map((raw, i) => {
         if (raw === "") return null;
@@ -144,6 +193,52 @@ export function QueryPane() {
           ⌘P History
         </button>
       </div>
+      {pendingPush && (
+        <div className="query__pending" role="status">
+          <span className="query__pending-dot" aria-hidden>
+            ●
+          </span>
+          <span>
+            <strong>1 pending from CLI</strong> —{" "}
+            <code className="mono">{truncateForPill(pendingPush.sql)}</code>
+          </span>
+          <span style={{ flex: 1 }} />
+          <button className="btn btn--primary" onClick={acceptPendingPush}>
+            Swap in
+          </button>
+          <button className="btn" onClick={dismissPendingPush}>
+            Dismiss
+          </button>
+        </div>
+      )}
+      {previewPending && !pendingPush && (
+        <div
+          className={`query__preview query__preview--${previewPending.kind}`}
+          role="alert"
+        >
+          <span className="query__preview-icon" aria-hidden>
+            {previewPending.kind === "mutating" ? "⚠" : "↓"}
+          </span>
+          <span>
+            <strong>
+              Agent proposed a{" "}
+              {previewPending.kind === "mutating" ? "write" : "query"}
+            </strong>{" "}
+            — review the editor, then Run (⌘⏎) to execute, or edit first.
+          </span>
+          <span style={{ flex: 1 }} />
+          <button
+            className="btn"
+            onClick={() => {
+              setPreviewPending(null);
+              setText("");
+              dirtyRef.current = false;
+            }}
+          >
+            Discard
+          </button>
+        </div>
+      )}
       <div
         className="query__editor"
         onKeyDown={(e) => {
@@ -169,7 +264,10 @@ export function QueryPane() {
             ],
             [schemasByName],
           )}
-          onChange={setText}
+          onChange={(v) => {
+            setText(v);
+            dirtyRef.current = true;
+          }}
           basicSetup={{ lineNumbers: true, foldGutter: true }}
         />
       </div>
@@ -263,6 +361,11 @@ function formatResultValue(v: Value): string {
   if (v === null) return "NULL";
   if (typeof v === "object" && v && "$blob_base64" in v) return "<blob>";
   return String(v);
+}
+
+function truncateForPill(s: string, n = 80): string {
+  const one = s.replace(/\s+/g, " ").trim();
+  return one.length <= n ? one : one.slice(0, n - 1) + "…";
 }
 
 /**

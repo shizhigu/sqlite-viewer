@@ -24,6 +24,11 @@ export interface PushedQuery {
   result: QueryResult | null;
   error: AppError | null;
   token: number;
+  /** When `true`, the server did NOT execute — the UI should populate the
+   * editor and show the "Agent proposed this — Run / Edit / Discard" bar. */
+  pending?: boolean;
+  /** Classifier verdict. `"mutating"` triggers the loud preview banner. */
+  kind?: "read_only" | "mutating";
 }
 
 /** One entry in the agent-activity log (pushed query or pushed open). */

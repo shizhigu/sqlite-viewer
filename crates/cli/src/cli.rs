@@ -158,6 +158,12 @@ pub struct PushArgs {
     /// Override the desktop port (default: scan 50500..=50509).
     #[arg(long)]
     pub port: Option<u16>,
+    /// Bypass the dry-run preview and execute immediately. Default: SELECT
+    /// / EXPLAIN run automatically; anything that looks like a write is
+    /// staged in the desktop editor for the human to approve. Pass `--run`
+    /// from trusted agent loops that have already consented.
+    #[arg(long)]
+    pub run: bool,
 }
 
 #[derive(Args, Debug)]

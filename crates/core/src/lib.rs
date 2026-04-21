@@ -3,6 +3,7 @@
 //! All types returned by this crate are `serde::Serialize` so the same shapes
 //! flow through Tauri `invoke` responses and the CLI's `--json` output.
 
+mod classify;
 mod connection;
 mod dump;
 mod error;
@@ -14,6 +15,7 @@ mod schema;
 mod stats;
 mod value;
 
+pub use classify::{classify as classify_sql, SqlKind};
 pub use connection::{Db, OpenOpts};
 pub use dump::DumpFilter;
 pub use error::{Error, Result};

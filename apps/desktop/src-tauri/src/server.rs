@@ -21,7 +21,7 @@ use std::sync::Arc;
 use std::thread;
 
 use serde::{Deserialize, Serialize};
-use sqlv_core::{Db, OpenOpts, Page, Value};
+use sqlv_core::{classify_sql, Db, OpenOpts, Page, SqlKind, Value};
 use tauri::{AppHandle, Emitter};
 use tiny_http::{Header, Method, Request, Response, Server};
 
@@ -42,6 +42,15 @@ struct PushRequest {
     limit: Option<u32>,
     #[serde(default)]
     offset: Option<u32>,
+    /// Execution policy:
+    ///   - `"auto"` (default): SELECT/EXPLAIN run immediately; anything
+    ///     that looks like a write populates the editor as pending and
+    ///     waits for the human to click Run.
+    ///   - `"run"`: always execute regardless of classification. Use from
+    ///     trusted agent loops that have already consented.
+    ///   - `"pending"`: always populate pending — useful for demos.
+    #[serde(default)]
+    mode: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -50,6 +59,12 @@ pub struct PushedEvent {
     pub result: Option<sqlv_core::QueryResult>,
     pub error: Option<AppError>,
     pub token: u64,
+    /// `true` when the server did not execute the query — the UI should
+    /// populate the editor with the SQL and wait for the user to Run it.
+    #[serde(default)]
+    pub pending: bool,
+    /// Serialized `SqlKind` so the UI can reason about intent.
+    pub kind: &'static str,
 }
 
 #[derive(Deserialize)]
@@ -222,6 +237,47 @@ fn handle_query(
         )
     })?;
 
+    let mode = req.mode.as_deref().unwrap_or("auto");
+    let kind = classify_sql(&req.sql);
+    let kind_str: &'static str = match kind {
+        SqlKind::ReadOnly => "read_only",
+        SqlKind::Mutating => "mutating",
+    };
+
+    // Policy for whether to execute:
+    //   mode=run     → always execute
+    //   mode=pending → never execute (demo / dry-run)
+    //   mode=auto    → execute read-only, preview mutating
+    let execute = match mode {
+        "run" => true,
+        "pending" => false,
+        _ => matches!(kind, SqlKind::ReadOnly),
+    };
+
+    if !execute {
+        // Dry-run: populate the editor and let the human approve.
+        let ev = PushedEvent {
+            sql: req.sql.clone(),
+            result: None,
+            error: None,
+            token,
+            pending: true,
+            kind: kind_str,
+        };
+        let _ = app.emit("pushed-query", ev);
+        let body = serde_json::json!({
+            "pending": true,
+            "sql": req.sql,
+            "kind": kind_str,
+            "message": "Proposed SQL is waiting for user approval in the desktop app.",
+        });
+        return Ok(Response::from_data(
+            serde_json::to_vec(&body).unwrap_or_else(|_| b"{}".to_vec()),
+        )
+        .with_status_code(202)
+        .with_header(json_header()));
+    }
+
     let guard = lock_state(state);
     let db = match guard.as_ref() {
         Some(db) => db,
@@ -231,6 +287,8 @@ fn handle_query(
                 result: None,
                 error: Some(AppError::not_open()),
                 token,
+                pending: false,
+                kind: kind_str,
             };
             let _ = app.emit("pushed-query", ev);
             return Err((409, AppError::not_open()));
@@ -250,6 +308,8 @@ fn handle_query(
                 result: Some(result.clone()),
                 error: None,
                 token,
+                pending: false,
+                kind: kind_str,
             };
             let _ = app.emit("pushed-query", ev);
             Ok(json_ok(&result))
@@ -261,6 +321,8 @@ fn handle_query(
                 result: None,
                 error: Some(err.clone()),
                 token,
+                pending: false,
+                kind: kind_str,
             };
             let _ = app.emit("pushed-query", ev);
             let status = match err.code.as_str() {
