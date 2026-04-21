@@ -11,11 +11,11 @@ import { Tabs } from "./components/Tabs";
 import { Toasts } from "./components/Toasts";
 import { Toolbar } from "./components/Toolbar";
 import { loadAllSchemas } from "./lib/loadSchemas";
-import { loadSession, saveSession } from "./lib/session";
+import { loadSession } from "./lib/session";
 import { tauri } from "./lib/tauri";
 import type { DbMeta, QueryResult } from "./lib/tauri";
 import { useZoomShortcuts } from "./lib/zoom";
-import { useAppStore } from "./store/app";
+import { setSessionPersistenceEnabled, useAppStore } from "./store/app";
 
 import "./styles/tokens.css";
 import "./styles/app.css";
@@ -42,37 +42,27 @@ export default function App() {
   // ⌘+ / ⌘- / ⌘0 — zoom in/out/reset
   useZoomShortcuts();
 
-  // Flag + ref to gate two effects against the hydration run:
-  //   - hydratedRef stops the persistence effect from overwriting
-  //     localStorage with `null` before we've had a chance to read it;
-  //   - hydrationAttemptedRef guarantees the hydration effect runs only
-  //     once even across StrictMode double-mounting in dev;
-  //   - lastSavedRef caches what we most recently wrote to localStorage
-  //     so the subscribe below can diff without relying on Zustand's
-  //     prev-state callback shape.
+  // Tracks whether hydration has completed on this mount — used only
+  // for logs. We DON'T try to short-circuit the effect across mounts:
+  // React StrictMode's simulated unmount+remount keeps ref state, so
+  // a naive `if (ran) return` guard on mount 2 blocks the only mount
+  // that will actually stay alive (mount 1's async got cancelled). The
+  // per-effect `cancelled` flag is the correct dedupe — mount 1 bails
+  // out, mount 2 runs to completion.
   const hydratedRef = useRef(false);
-  const hydrationAttemptedRef = useRef(false);
-  const lastSavedRef = useRef<{
-    dbPath: string | null;
-    readWrite: boolean;
-    activeTab: string;
-    selectedTable: string | null;
-  } | null>(null);
 
   // Restore the previous session on cold start: re-open the DB the
   // user had up, put them back on the same tab, and select the same
   // table if it still exists. Silent on any failure — missing files,
   // renamed tables, and parse errors all collapse to "cold start".
   useEffect(() => {
-    if (hydrationAttemptedRef.current) return;
-    hydrationAttemptedRef.current = true;
-
     let cancelled = false;
     (async () => {
       const session = await loadSession();
       if (cancelled) return;
       if (!session) {
         hydratedRef.current = true;
+        setSessionPersistenceEnabled(true);
         return;
       }
       try {
@@ -116,18 +106,9 @@ export default function App() {
         console.warn("[sqlv:session] hydration failed:", e);
         // File moved, perms changed, schema drift — all non-fatal.
       } finally {
-        // Prime the last-saved snapshot with whatever ended up in the
-        // store, so the subscribe's diff doesn't immediately fire a
-        // redundant save on the first post-hydration change.
-        const s = useAppStore.getState();
-        lastSavedRef.current = {
-          dbPath: s.meta?.path ?? null,
-          readWrite: s.readWrite,
-          activeTab: s.activeTab,
-          selectedTable: s.selectedTable,
-        };
         hydratedRef.current = true;
-        console.debug("[sqlv:session] hydration done:", lastSavedRef.current);
+        setSessionPersistenceEnabled(true);
+        console.debug("[sqlv:session] hydration done, persistence enabled");
       }
     })();
 
@@ -137,45 +118,12 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist the session slice on every relevant change. Diffs against
-  // `lastSavedRef` (declared above) so we don't depend on Zustand's
-  // prev-state callback shape, which varies between configurations.
-  // Gated on hydratedRef so state settling DURING restoration doesn't
-  // overwrite the localStorage we just read.
-  useEffect(() => {
-    console.log("[sqlv:session] subscribe registered");
-    const unsub = useAppStore.subscribe((state) => {
-      const next = {
-        dbPath: state.meta?.path ?? null,
-        readWrite: state.readWrite,
-        activeTab: state.activeTab,
-        selectedTable: state.selectedTable,
-      };
-      console.log(
-        "[sqlv:session] subscribe fire  hydrated=",
-        hydratedRef.current,
-        " next=",
-        next,
-      );
-      if (!hydratedRef.current) return;
-      const prev = lastSavedRef.current;
-      if (
-        prev &&
-        prev.dbPath === next.dbPath &&
-        prev.readWrite === next.readWrite &&
-        prev.activeTab === next.activeTab &&
-        prev.selectedTable === next.selectedTable
-      ) {
-        return;
-      }
-      lastSavedRef.current = next;
-      saveSession(next);
-    });
-    return () => {
-      console.log("[sqlv:session] subscribe cleanup");
-      unsub();
-    };
-  }, []);
+  // Note: persistence used to be a `useAppStore.subscribe` callback
+  // here. Under tauri dev that callback never fired (Zustand v5 quirk
+  // + StrictMode remount interaction — diagnosed via tauri-side
+  // eprintln showing session_write was literally never called). The
+  // replacement is side-effects wired directly into the four relevant
+  // store setters — see store/app.ts `persist()`.
 
   // Apply theme mode to the document root. `auto` removes the attribute so
   // the CSS `prefers-color-scheme` rules take over.

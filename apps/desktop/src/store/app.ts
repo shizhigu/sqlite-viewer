@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { saveSession } from "../lib/session";
 import type {
   AppError,
   DbMeta,
@@ -9,6 +10,29 @@ import type {
   Value,
   ViewInfo,
 } from "../lib/tauri";
+
+/**
+ * Gate: when false (module load, or before hydration has finished),
+ * `persist()` is a no-op. The hydration effect flips this to true in
+ * its finally block. Under HMR, the store module reloads → gate falls
+ * back to false → hydration effect *also* re-runs (we no longer guard
+ * it with a ref) → gate gets re-flipped. Net: saves always restart
+ * working after HMR, and they never fire with partial state mid-restore.
+ */
+let persistenceEnabled = false;
+export function setSessionPersistenceEnabled(on: boolean): void {
+  persistenceEnabled = on;
+}
+
+function persist(state: Pick<AppStateShape, "meta" | "readWrite" | "activeTab" | "selectedTable">) {
+  if (!persistenceEnabled) return;
+  void saveSession({
+    dbPath: state.meta?.path ?? null,
+    readWrite: state.readWrite,
+    activeTab: state.activeTab,
+    selectedTable: state.selectedTable,
+  });
+}
 
 export type TabKind = "browse" | "query" | "schema";
 export type ThemeMode = "auto" | "light" | "dark";
@@ -158,13 +182,33 @@ export const useAppStore = create<AppStateShape>((set) => ({
   ...defaults,
   theme: loadTheme(),
 
-  setMeta: (meta) => set({ meta }),
+  setMeta: (meta) =>
+    set((s) => {
+      const next = { ...s, meta };
+      persist(next);
+      return { meta };
+    }),
   setTables: (tables) => set({ tables }),
   setViews: (views) => set({ views }),
-  setSelectedTable: (selectedTable) => set({ selectedTable }),
+  setSelectedTable: (selectedTable) =>
+    set((s) => {
+      const next = { ...s, selectedTable };
+      persist(next);
+      return { selectedTable };
+    }),
   setSelectedSchema: (selectedSchema) => set({ selectedSchema }),
-  setActiveTab: (activeTab) => set({ activeTab }),
-  setReadWrite: (readWrite) => set({ readWrite }),
+  setActiveTab: (activeTab) =>
+    set((s) => {
+      const next = { ...s, activeTab };
+      persist(next);
+      return { activeTab };
+    }),
+  setReadWrite: (readWrite) =>
+    set((s) => {
+      const next = { ...s, readWrite };
+      persist(next);
+      return { readWrite };
+    }),
   setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
   setTheme: (theme) => {
     localStorage.setItem(THEME_KEY, theme);
