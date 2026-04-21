@@ -677,11 +677,32 @@ button {
   .query__pending, .query__pending-dot { animation: none; }
 }
 
+/* CodeMirror wraps its own scroller — if THIS wrapper also sets
+ * `overflow: auto`, the two scrollers fight over pointer mapping and
+ * clicks in the middle of the visible area resolve to character
+ * positions that are scrolled out of the inner view. Symptom: "I can
+ * only place the cursor at the very end." Fix: outer wrapper is just
+ * a frame (overflow: hidden, relative), CodeMirror's .cm-scroller
+ * does all the scrolling. */
 .query__editor {
   grid-row: 3;
-  overflow: auto;
+  position: relative;
+  overflow: hidden;
   min-height: 120px;
   border-bottom: 2px solid var(--border-strong);
+  display: flex;
+  flex-direction: column;
+}
+
+.query__editor > .cm-theme,
+.query__editor .cm-editor {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.query__editor .cm-scroller {
+  overflow: auto;
 }
 
 .query__count-ghost {

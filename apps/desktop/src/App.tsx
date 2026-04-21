@@ -175,8 +175,28 @@ export default function App() {
   // Listen for external pushes from the local loopback server (triggered by
   // `sqlv push` / `sqlv push-open`). Keep the handlers in App so state flows
   // through the single store.
+  //
+  // Race note: `listen()` returns a Promise. If the effect is re-run (React
+  // StrictMode double-mount in dev, Tauri HMR, hot reload) before that
+  // Promise resolves, the cleanup callback runs with an empty `unsubs`
+  // array and the eventual handler is never detached. Every re-mount then
+  // adds another live listener — which is exactly how we ended up with
+  // one `pushed-open` event producing 4 identical "Opened …" toasts.
+  //
+  // Fix: await the Promise synchronously-ish inside an async IIFE and
+  // check a `cancelled` flag before registering. If cleanup beat the
+  // resolution, unsub immediately on arrival.
   useEffect(() => {
+    let cancelled = false;
     const unsubs: UnlistenFn[] = [];
+    const adopt = (u: UnlistenFn) => {
+      if (cancelled) {
+        u();
+        return;
+      }
+      unsubs.push(u);
+    };
+
     listen<{
       sql: string;
       result: QueryResult | null;
@@ -215,7 +235,7 @@ export default function App() {
       } else {
         pushToast("success", `Pushed query ran in ${e.payload.result?.elapsed_ms ?? 0} ms`);
       }
-    }).then((u) => unsubs.push(u));
+    }).then(adopt);
 
     listen<{
       path: string;
@@ -250,25 +270,17 @@ export default function App() {
       } catch (err) {
         pushError(err as string);
       }
-    }).then((u) => unsubs.push(u));
+    }).then(adopt);
 
     return () => {
+      cancelled = true;
       unsubs.forEach((u) => u());
     };
-  }, [
-    appendActivity,
-    pushError,
-    pushToast,
-    setActiveTab,
-    setMeta,
-    setPushedQuery,
-    setReadWrite,
-    setSchemasByName,
-    setSelectedSchema,
-    setSelectedTable,
-    setTables,
-    setViews,
-  ]);
+    // Deps are all stable Zustand setters; re-running this effect would
+    // leak a second pair of listeners which is exactly the bug we just
+    // fixed. Run once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="app" data-mode={readWrite ? "rw" : "ro"}>
