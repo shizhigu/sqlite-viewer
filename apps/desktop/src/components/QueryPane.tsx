@@ -256,29 +256,33 @@ export function QueryPane() {
           </span>
         )}
         <span style={{ flex: 1 }} />
+        {/* One clear action: bookmark the current editor text. */}
         <button
           className="btn"
           onClick={promptAndSave}
-          title="⌘⇧S — save this query"
+          title="Save current query (⌘⇧S)"
           disabled={!meta}
         >
-          Save
+          ☆ Bookmark
         </button>
+        {/* Library: the two palette openers, visually paired + separated
+         * from the action above so "Save" vs "Saved" can't be confused. */}
+        <span className="query__toolbar-sep" aria-hidden />
         <button
           className="btn"
           onClick={() => setSavedPaletteOpen(true)}
-          title="⌘S — open saved queries"
+          title="Saved queries (⌘S)"
           disabled={!meta}
         >
-          ⌘S Saved
+          Saved
         </button>
         <button
           className="btn"
           onClick={() => setPaletteOpen(true)}
-          title="⌘P — query history"
+          title="Query history (⌘P)"
           disabled={!meta}
         >
-          ⌘P History
+          History
         </button>
       </div>
       {pendingPush && (

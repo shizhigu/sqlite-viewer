@@ -593,6 +593,16 @@ button {
   border-bottom: 2px solid var(--border-strong);
 }
 
+/* Thin vertical rule that sits between the single-shot "Bookmark"
+ * action and the "Saved / History" palette-openers, so users don't
+ * confuse "Save" and "Saved" as two flavours of the same thing. */
+.query__toolbar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
 .query__pending,
 .query__preview {
   grid-row: 2;
@@ -1002,17 +1012,146 @@ button {
   to   { transform: translateX(0);    opacity: 1; }
 }
 
-/* Command palette (history / saved queries) — springs in over a
-   fading backdrop. */
-.palette {
-  animation: palette-in var(--dur) var(--ease-spring);
-}
+/* ---- Command palette (history / saved queries) ----
+ *
+ * Full-viewport modal. Backdrop dims everything, palette is a centred
+ * card with a search input, hint row, and list.
+ *
+ * No transform in the open-animation — only opacity + slight scroll-
+ * from-above via top positioning. Transforms on ancestors of the
+ * CodeMirror editor break click-to-position in WKWebView, and the
+ * palette renders inside QueryPane which is an ancestor of the
+ * editor. Learned the hard way; keep it that way.
+ */
 .palette__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: color-mix(in srgb, var(--bg) 75%, #000);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10vh var(--s-4) var(--s-4);
   animation: backdrop-fade var(--dur-fast) var(--ease-swift);
 }
+
+.palette {
+  width: min(640px, 100%);
+  background: var(--bg-panel);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+  animation: palette-in var(--dur) var(--ease-swift);
+}
+
+.palette__input {
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-lg);
+  outline: none;
+}
+
+.palette__input::placeholder {
+  color: var(--text-muted);
+}
+
+.palette__hint {
+  padding: 6px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  display: flex;
+  gap: var(--s-3);
+  align-items: center;
+}
+
+.palette__hint kbd {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.palette__list {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.palette__empty {
+  padding: var(--s-5) var(--s-4);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.palette__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 18px;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.palette__item:last-child {
+  border-bottom: 0;
+}
+
+.palette__item:hover,
+.palette__item--active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
+  border-left-color: var(--accent);
+}
+
+.palette__sql {
+  font-size: var(--text-sm);
+  color: var(--text);
+  line-height: var(--lh-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette__meta {
+  margin-top: 4px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.palette__error {
+  margin-left: 4px;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.palette__item--active .palette__sql {
+  color: var(--text);
+}
+
 @keyframes palette-in {
-  from { transform: translateY(-12px) scale(0.96); opacity: 0; }
-  to   { transform: translateY(0)     scale(1);    opacity: 1; }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 @keyframes backdrop-fade {
   from { opacity: 0; }
