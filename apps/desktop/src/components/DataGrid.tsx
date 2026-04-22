@@ -340,13 +340,16 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
       </div>
       <div className="grid__footer">
         {selected.size > 0 && <span>{selected.size} selected</span>}
-        <label className="grid__stage-toggle" title="Queue edits and commit in one transaction">
+        <label
+          className="grid__stage-toggle"
+          title="Queue every edit / add / delete locally instead of writing it immediately. Review the list up top, then hit Commit all to apply them in one transaction — succeed together or roll back together."
+        >
           <input
             type="checkbox"
             checked={stagingEnabled}
             onChange={(e) => setStagingEnabled(e.target.checked)}
           />
-          Stage
+          Batch edits
           {stagedCount > 0 && (
             <span className="chip staged__count-chip">{stagedCount}</span>
           )}
