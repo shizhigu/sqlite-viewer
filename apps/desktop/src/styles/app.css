@@ -800,6 +800,27 @@ button {
   border-bottom: 0;
 }
 
+/* Overview mode — rows clickable to drill into a single table. Hover
+ * nudges the accent tint so the click affordance is obvious. */
+.schema-overview tr {
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-swift);
+}
+.schema-overview tr:hover td {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+}
+.schema-overview td {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Back-to-overview button — sits above the detail card, small. */
+.schema-back {
+  margin-bottom: var(--s-3);
+  font-size: var(--text-xs);
+  height: 26px;
+  padding: 0 10px;
+}
+
 /* ---- StatusBar ---- */
 
 .status {
