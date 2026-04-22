@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { TriggerInfo } from "../lib/tauri";
+import type { SchemaInfo, TableInfo, TriggerInfo } from "../lib/tauri";
 import { tauri } from "../lib/tauri";
 import { useAppStore } from "../store/app";
 
@@ -38,6 +38,38 @@ export function SchemaPane() {
       .catch(() => setTriggers([]));
   }, [meta?.path]);
 
+  // Schema switcher — `main`, `temp` (if non-empty), plus anything the
+  // user has ATTACHed. Defaults to `main`; changing it swaps which
+  // schema's tables the overview shows. The store's `tables` / `views`
+  // arrays are the main schema; other schemas get fetched lazily.
+  const [schemas, setSchemas] = useState<SchemaInfo[]>([]);
+  const [activeSchema, setActiveSchema] = useState<string>("main");
+  const [attachedTables, setAttachedTables] = useState<TableInfo[]>([]);
+  const [loadingAttached, setLoadingAttached] = useState(false);
+  useEffect(() => {
+    if (!meta) {
+      setSchemas([]);
+      return;
+    }
+    tauri
+      .listSchemas()
+      .then((list) => setSchemas(list.filter((s) => s.name !== "temp")))
+      .catch(() => setSchemas([]));
+  }, [meta?.path]);
+
+  useEffect(() => {
+    if (activeSchema === "main") {
+      setAttachedTables([]);
+      return;
+    }
+    setLoadingAttached(true);
+    tauri
+      .listTablesInSchema(activeSchema)
+      .then(setAttachedTables)
+      .catch(() => setAttachedTables([]))
+      .finally(() => setLoadingAttached(false));
+  }, [activeSchema, meta?.path]);
+
   if (!meta) {
     return (
       <div className="empty-state">
@@ -57,13 +89,20 @@ export function SchemaPane() {
   };
 
   if (!selectedSchema) {
+    const tablesForActive = activeSchema === "main" ? tables : attachedTables;
+    const viewsForActive = activeSchema === "main" ? views : [];
+    const triggersForActive = activeSchema === "main" ? triggers : [];
     return (
       <OverviewMode
-        tables={tables}
-        views={views}
-        triggers={triggers}
+        schemas={schemas}
+        activeSchema={activeSchema}
+        onActiveSchemaChange={setActiveSchema}
+        tables={tablesForActive}
+        views={viewsForActive}
+        triggers={triggersForActive}
         schemasByName={schemasByName}
         onPick={pickTable}
+        loading={loadingAttached}
       />
     );
   }
@@ -216,29 +255,69 @@ export function SchemaPane() {
 
 /** All-tables overview. Shown when no single table is selected. */
 function OverviewMode({
+  schemas,
+  activeSchema,
+  onActiveSchemaChange,
   tables,
   views,
   triggers,
   schemasByName,
   onPick,
+  loading,
 }: {
+  schemas: SchemaInfo[];
+  activeSchema: string;
+  onActiveSchemaChange: (name: string) => void;
   tables: { name: string; row_count: number | null }[];
   views: { name: string }[];
   triggers: TriggerInfo[];
   schemasByName: Record<string, { columns: unknown[]; foreign_keys: unknown[]; indexes: unknown[] }>;
   onPick: (name: string) => void;
+  loading: boolean;
 }) {
   const triggerCountByTable = triggers.reduce<Record<string, number>>((acc, t) => {
     acc[t.table] = (acc[t.table] ?? 0) + 1;
     return acc;
   }, {});
 
+  // Only show the picker when there's more than one schema to pick
+  // from. For 99% of DBs that don't use ATTACH, we keep the UI quiet.
+  const showPicker = schemas.length > 1;
+
   return (
     <div className="schema-pane">
+      {showPicker && (
+        <div className="schema-picker" role="tablist" aria-label="Database schema">
+          {schemas.map((s) => (
+            <button
+              key={s.name}
+              role="tab"
+              aria-selected={s.name === activeSchema}
+              className={`schema-picker__tab ${
+                s.name === activeSchema ? "schema-picker__tab--active" : ""
+              }`}
+              onClick={() => onActiveSchemaChange(s.name)}
+              title={s.file || "(in-memory)"}
+            >
+              <span className="schema-picker__name">{s.name}</span>
+              {s.name !== "main" && (
+                <span className="schema-picker__badge">attached</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
       <section className="schema-section">
-        <h3>All tables</h3>
+        <h3>
+          Tables{" "}
+          {activeSchema !== "main" && (
+            <span className="schema-scope mono">· {activeSchema}</span>
+          )}
+        </h3>
         <p style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>
-          Click a row to inspect its columns, keys, indexes, and triggers.
+          {loading
+            ? "Loading…"
+            : "Click a row to inspect its columns, keys, indexes, and triggers."}
         </p>
         <table className="schema-overview">
           <thead>

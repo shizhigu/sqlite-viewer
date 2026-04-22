@@ -821,6 +821,79 @@ button {
   padding: 0 10px;
 }
 
+/* ---- Attached-DB schema switcher ---- */
+
+.schema-picker {
+  display: inline-flex;
+  gap: 0;
+  margin-bottom: var(--s-3);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+
+.schema-picker__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-swift),
+    color var(--dur-fast) var(--ease-swift);
+}
+.schema-picker__tab:last-child {
+  border-right: 0;
+}
+.schema-picker__tab:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-panel));
+}
+.schema-picker__tab--active {
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+.schema-picker__tab--active:hover {
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+
+.schema-picker__name {
+  font-family: var(--font-mono);
+}
+
+.schema-picker__badge {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+.schema-picker__tab--active .schema-picker__badge {
+  background: color-mix(in srgb, var(--text-inverse) 18%, transparent);
+  color: var(--text-inverse);
+}
+
+/* Small inline qualifier next to the "Tables" heading when the user
+ * is looking at an attached schema, so they don't lose track of which
+ * DB's tables are listed below. */
+.schema-scope {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: var(--text-sm);
+}
+
 /* ---- StatusBar ---- */
 
 .status {
