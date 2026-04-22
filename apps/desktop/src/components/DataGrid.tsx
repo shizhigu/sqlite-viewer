@@ -45,6 +45,24 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
+  // One-click column sort. Clicking a header cycles:
+  //   unsorted → ASC → DESC → unsorted.
+  // The sort is pushed down to SQLite via ORDER BY (not a client-side
+  // re-sort), so it's correct across paginated pages: page 2 of a
+  // DESC-sorted view is the next 1000 rows *after* DESC-ordering the
+  // whole table, not rows 1001–2000 in insertion order.
+  const [sort, setSort] = useState<{ col: string; dir: "asc" | "desc" } | null>(
+    null,
+  );
+  const cycleSort = (col: string) => {
+    setPage(0); // new ordering — start from the first page
+    setSort((prev) => {
+      if (!prev || prev.col !== col) return { col, dir: "asc" };
+      if (prev.dir === "asc") return { col, dir: "desc" };
+      return null;
+    });
+  };
+
   // react-virtual scroller. The parent ref is the scrollable wrapper; the
   // virtualizer tells us a virtual list of rows with absolute Y-offsets.
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -83,8 +101,11 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
       setLoading(true);
       setQueryRunning(true);
       try {
+        const orderBy = sort
+          ? ` ORDER BY ${quote(sort.col)} ${sort.dir === "asc" ? "ASC" : "DESC"}`
+          : "";
         const res = await tauri.runQuery(
-          `SELECT * FROM ${quote(schema.name)}`,
+          `SELECT * FROM ${quote(schema.name)}${orderBy}`,
           [],
           PAGE_SIZE,
           page * PAGE_SIZE,
@@ -101,7 +122,7 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
     return () => {
       cancelled = true;
     };
-  }, [schema.name, page, pushError]);
+  }, [schema.name, page, sort, pushError]);
 
   const commitCell = async (
     rowIdx: number,
@@ -275,21 +296,38 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
           role="row"
         >
           <div className="grid__cell grid__cell--idx">#</div>
-          {schema.columns.map((col) => (
-            <div
-              key={col.name}
-              className="grid__cell grid__cell--head"
-              role="columnheader"
-            >
-              <span>
-                {col.pk > 0 && <span className="col-badge">⚷</span>}
-                {col.name}
-              </span>
-              <span className="col-type">
-                {col.decl_type ?? ""} {col.not_null ? "· NOT NULL" : ""}
-              </span>
-            </div>
-          ))}
+          {schema.columns.map((col) => {
+            const active = sort?.col === col.name;
+            return (
+              <div
+                key={col.name}
+                className={`grid__cell grid__cell--head grid__cell--sortable ${active ? "grid__cell--sorted" : ""}`}
+                role="columnheader"
+                aria-sort={
+                  active
+                    ? sort!.dir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+                onClick={() => cycleSort(col.name)}
+                title={`Click to sort by ${col.name} — asc → desc → off`}
+              >
+                <span>
+                  {col.pk > 0 && <span className="col-badge">⚷</span>}
+                  {col.name}
+                  {active && (
+                    <span className="grid__sort-arrow" aria-hidden>
+                      {sort!.dir === "asc" ? " ↑" : " ↓"}
+                    </span>
+                  )}
+                </span>
+                <span className="col-type">
+                  {col.decl_type ?? ""} {col.not_null ? "· NOT NULL" : ""}
+                </span>
+              </div>
+            );
+          })}
         </div>
         <div
           className="grid__virtual-body"
