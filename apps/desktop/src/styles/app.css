@@ -761,7 +761,13 @@ button {
 
 /* ---- SchemaPane ---- */
 
-.schema-pane {
+/* Note the `.content >` prefix: the generic
+ * `.content > :nth-child(2) { overflow: hidden }` rule earlier in this
+ * file has specificity (0,2,0). A bare `.schema-pane` selector is
+ * (0,1,0) and loses — overflow stayed hidden and nothing scrolled.
+ * Prefixing puts us at (0,2,0) too, and since this rule is declared
+ * later in the cascade it wins. */
+.content > .schema-pane {
   height: 100%;
   min-height: 0;
   overflow-y: auto;
