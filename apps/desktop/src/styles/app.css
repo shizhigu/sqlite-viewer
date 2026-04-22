@@ -916,9 +916,10 @@ button {
   border-top: 2px solid var(--border-strong);
 }
 
-.status .right {
+.status__info {
   margin-left: auto;
   font-family: var(--font-mono);
+  color: var(--text-muted);
 }
 
 /* ---- Empty + toast ---- */

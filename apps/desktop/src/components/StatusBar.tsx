@@ -2,13 +2,13 @@ import { useAppStore } from "../store/app";
 
 export function StatusBar() {
   const meta = useAppStore((s) => s.meta);
-  const rw = useAppStore((s) => s.readWrite);
+  // Deliberately no read/write chip here. The toolbar already has an
+  // interactive one (click to toggle); duplicating a *non*-clickable
+  // copy in the footer just made people wonder why clicking it did
+  // nothing.
   return (
     <footer className="status">
-      <span className={`chip ${rw ? "chip--mode-rw" : "chip--mode-ro"}`}>
-        {rw ? "READ-WRITE" : "READ-ONLY"}
-      </span>
-      <span className="right">
+      <span className="status__info">
         {meta
           ? `v${meta.sqlite_library_version} · ${meta.encoding} · ${meta.page_count} pg · ${formatBytes(meta.size_bytes)}`
           : "—"}
