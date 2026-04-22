@@ -1440,6 +1440,17 @@ button {
   accent-color: var(--accent);
 }
 
+/* Greyed state when the DB is read-only — the toggle can't do anything
+ * useful until the user flips RW on, so make that unmistakable rather
+ * than letting it pretend to be active. */
+.grid__stage-toggle--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.grid__stage-toggle--disabled input {
+  cursor: not-allowed;
+}
+
 /* ---- Staged-changes panel ---- */
 
 .browse {

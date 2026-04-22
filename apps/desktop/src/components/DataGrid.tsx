@@ -341,12 +341,17 @@ export function DataGrid({ schema, totalRows, onMutated }: DataGridProps) {
       <div className="grid__footer">
         {selected.size > 0 && <span>{selected.size} selected</span>}
         <label
-          className="grid__stage-toggle"
-          title="Queue every edit / add / delete locally instead of writing it immediately. Review the list up top, then hit Commit all to apply them in one transaction — succeed together or roll back together."
+          className={`grid__stage-toggle ${!readWrite ? "grid__stage-toggle--disabled" : ""}`}
+          title={
+            readWrite
+              ? "Queue every edit / add / delete locally instead of writing it immediately. Review the list up top, then hit Commit all to apply them in one transaction — succeed together or roll back together."
+              : "Read-only mode. Toggle READ-WRITE in the top-right toolbar to enable edits and batching."
+          }
         >
           <input
             type="checkbox"
             checked={stagingEnabled}
+            disabled={!readWrite}
             onChange={(e) => setStagingEnabled(e.target.checked)}
           />
           Batch edits
