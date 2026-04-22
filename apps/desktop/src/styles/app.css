@@ -334,13 +334,17 @@ button {
 
 .content > :nth-child(2) {
   /* The active pane lives here. Give it hard bounds so its inner
-     scroll containers (grid, schema-pane, query editor) work.
+     scroll containers (grid, schema-pane, query editor) work. We used
+     to also set `overflow: hidden` here — DON'T. That's a shorthand
+     (0,2,0 specificity) and silently wins over child rules like
+     `.schema-pane { overflow-y: auto }` (0,1,0), so overflow stays
+     hidden and the pane refuses to scroll. Each pane declares its
+     own overflow instead.
      Do NOT impose `display`: each pane picks its own layout mode, and
-     overriding it here would clobber .query's grid layout (which breaks
-     CodeMirror's internal hit-testing). */
+     overriding it here would clobber .query's grid layout (which
+     breaks CodeMirror's internal hit-testing). */
   min-height: 0;
   min-width: 0;
-  overflow: hidden;
 }
 
 .tabs {
@@ -581,6 +585,7 @@ button {
     minmax(0, 40%); /* 6. results */
   height: 100%;
   min-height: 0;
+  overflow: hidden;
   background: var(--bg-panel);
 }
 
@@ -761,13 +766,7 @@ button {
 
 /* ---- SchemaPane ---- */
 
-/* Note the `.content >` prefix: the generic
- * `.content > :nth-child(2) { overflow: hidden }` rule earlier in this
- * file has specificity (0,2,0). A bare `.schema-pane` selector is
- * (0,1,0) and loses — overflow stayed hidden and nothing scrolled.
- * Prefixing puts us at (0,2,0) too, and since this rule is declared
- * later in the cascade it wins. */
-.content > .schema-pane {
+.schema-pane {
   height: 100%;
   min-height: 0;
   overflow-y: auto;
@@ -1448,6 +1447,7 @@ button {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .staged {

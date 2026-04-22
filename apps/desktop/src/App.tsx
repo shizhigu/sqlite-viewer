@@ -1,5 +1,5 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 import { ActivityPanel } from "./components/ActivityPanel";
 import { BrowsePane } from "./components/BrowsePane";
@@ -42,26 +42,18 @@ export default function App() {
   // ⌘+ / ⌘- / ⌘0 — zoom in/out/reset
   useZoomShortcuts();
 
-  // Tracks whether hydration has completed on this mount — used only
-  // for logs. We DON'T try to short-circuit the effect across mounts:
-  // React StrictMode's simulated unmount+remount keeps ref state, so
-  // a naive `if (ran) return` guard on mount 2 blocks the only mount
-  // that will actually stay alive (mount 1's async got cancelled). The
-  // per-effect `cancelled` flag is the correct dedupe — mount 1 bails
-  // out, mount 2 runs to completion.
-  const hydratedRef = useRef(false);
-
   // Restore the previous session on cold start: re-open the DB the
   // user had up, put them back on the same tab, and select the same
   // table if it still exists. Silent on any failure — missing files,
   // renamed tables, and parse errors all collapse to "cold start".
+  // No short-circuit ref across StrictMode mounts: mount 1's async
+  // self-cancels via the `cancelled` flag, mount 2 runs to completion.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const session = await loadSession();
       if (cancelled) return;
       if (!session) {
-        hydratedRef.current = true;
         setSessionPersistenceEnabled(true);
         return;
       }
@@ -106,7 +98,6 @@ export default function App() {
         console.warn("[sqlv:session] hydration failed:", e);
         // File moved, perms changed, schema drift — all non-fatal.
       } finally {
-        hydratedRef.current = true;
         setSessionPersistenceEnabled(true);
         console.debug("[sqlv:session] hydration done, persistence enabled");
       }

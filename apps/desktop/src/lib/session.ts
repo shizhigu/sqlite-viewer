@@ -41,6 +41,3 @@ export async function saveSession(s: Partial<PersistedSession>): Promise<void> {
   }
 }
 
-export async function clearSession(): Promise<void> {
-  await saveSession({});
-}
