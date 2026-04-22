@@ -762,7 +762,10 @@ button {
 /* ---- SchemaPane ---- */
 
 .schema-pane {
-  overflow: auto;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--s-4);
   background: var(--bg);
 }
